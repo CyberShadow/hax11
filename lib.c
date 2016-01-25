@@ -5,6 +5,9 @@
 #include <xcb/xcb.h>
 #include <xcb/randr.h>
 
+// Specify the X11 coordinates of your 4K monitor here.
+#define TARGET_X 0
+#define TARGET_Y 0
 
 
 xcb_randr_get_crtc_info_reply_t *
@@ -21,19 +24,18 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 
 	xcb_randr_get_crtc_info_reply_t* real = original_fun(c, cookie, e);
 
-	if (real == 0)
+	if (!real)
 		return real;
 
-	if (real->x == 0 && real->width == 1920) {
-		real->width = 1920 * 2;
-		real->height = 2160;
-	}
-
-	if (real->x == 1920) {
-		real->x = 0;
-		real->y = 0;
-		real->width = 0;
-		real->height = 0;
+	if (real->width == 1920 && real->height == 2160) { // Is 4K MST panel?
+		if (real->x == TARGET_X) { // Left panel
+			real->width = 1920 * 2; // resize
+			//real->height = 2160;
+		}
+		else
+		if (real->x == TARGET_X + 1920) { // Right panel
+			real->x = real->y = real->width = real->height = 0; // disable
+		}
 	}
 
 	return real;

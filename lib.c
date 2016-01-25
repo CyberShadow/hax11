@@ -14,6 +14,10 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 	xcb_randr_get_crtc_info_reply_t* (*original_fun)(xcb_connection_t *c, xcb_randr_get_crtc_info_cookie_t   cookie, xcb_generic_error_t **e);
 
 	original_fun = dlsym(RTLD_NEXT, "xcb_randr_get_crtc_info_reply");
+	if (!original_fun) {
+		fprintf(stderr, "4khack: Ack, dlsym failed!\n");
+		return NULL;
+	}
 
 	xcb_randr_get_crtc_info_reply_t* real = original_fun(c, cookie, e);
 

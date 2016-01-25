@@ -43,6 +43,12 @@ int main() {
 		                                                    screen_res_c,
 		                                                    NULL);
 
+	if (!screen_res_r) {
+		printf("xcb_randr_get_screen_resources_reply returned NULL - "
+			"make sure RandR is available (maybe Xinerama is enabled?)\n");
+		return 1;
+	}
+
 	printf("Num crts: %i\n", screen_res_r->num_crtcs);
 
 	// Getting geometry

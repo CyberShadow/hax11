@@ -6,7 +6,7 @@
 #include <xcb/randr.h>
 
 // Specify the X11 coordinates of your 4K monitor here.
-#define TARGET_X 0
+#define TARGET_X 1920
 #define TARGET_Y 0
 
 

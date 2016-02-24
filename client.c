@@ -62,12 +62,23 @@ int main() {
 			crtc_info_r = xcb_randr_get_crtc_info_reply(connection,
 			                                            crtc_info_c,
 			                                            NULL);
-		printf("CRTCS %i, x: %i, y: %i, w: %i, h: %i\n",
-		       i,
-		       crtc_info_r->x,
-		       crtc_info_r->y,
-		       crtc_info_r->width,
-		       crtc_info_r->height);
+		printf("CRTCS %i:\n", i);
+		#define DUMP_FIELD(x) printf("\t%20s == %d\n", #x, crtc_info_r->x)
+		DUMP_FIELD(response_type);
+		DUMP_FIELD(status);
+		DUMP_FIELD(sequence);
+		DUMP_FIELD(length);
+		DUMP_FIELD(timestamp);
+		DUMP_FIELD(x);
+		DUMP_FIELD(y);
+		DUMP_FIELD(width);
+		DUMP_FIELD(height);
+		DUMP_FIELD(mode);
+		DUMP_FIELD(rotation);
+		DUMP_FIELD(rotations);
+		DUMP_FIELD(num_outputs);
+		DUMP_FIELD(num_possible_outputs);
+		#undef DUMP_FIELD
 	}
 
 	return 0;

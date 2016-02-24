@@ -9,3 +9,9 @@ lib32/dell4khack.so: lib.c Makefile
 	gcc -m32 lib.c -o $@ -fPIC -shared -ldl -D_GNU_SOURCE
 lib64/dell4khack.so: lib.c Makefile
 	gcc -m64 lib.c -o $@ -fPIC -shared -ldl -D_GNU_SOURCE
+
+install:
+	install -m 644 lib32/dell4khack.so /usr/local/lib32/
+	install -m 644 lib64/dell4khack.so /usr/local/lib64/
+
+.PHONY: all lib install

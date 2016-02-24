@@ -13,5 +13,6 @@ lib64/dell4khack.so: lib.c Makefile
 install:
 	install -m 644 lib32/dell4khack.so /usr/local/lib32/
 	install -m 644 lib64/dell4khack.so /usr/local/lib64/
+	install profile.d/dell4khack.sh /etc/profile.d/
 
 .PHONY: all lib install

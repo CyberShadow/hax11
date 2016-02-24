@@ -16,7 +16,7 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
                                xcb_generic_error_t              **e  /**< */) {
 	static void* handle = NULL;
 	if (!handle) {
-		handle = dlopen("/usr/lib/libxcb-randr.so.0", RTLD_LAZY);
+		handle = dlopen("/usr/$LIB/libxcb-randr.so.0", RTLD_LAZY);
 	}
 	if (!handle) {
 		fprintf(stderr, "4khack: Ack, dlopen failed!\n");
@@ -49,4 +49,63 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 	}
 
 	return real;
+}
+
+void* xlib = NULL;
+
+#define NEXT(handle, path, func) ({									\
+			if (!handle) {											\
+				handle = dlopen(path, RTLD_LAZY);					\
+			}														\
+			if (!handle) {											\
+				fprintf(stderr, "4khack: Ack, dlopen failed!\n");	\
+			}														\
+			(typeof(&func))dlsym(handle, #func);					\
+		})
+
+void fixCoords(int* x, int* y, unsigned int width, unsigned int height)
+{
+	if (width == 3840 && height == 2160)
+	{
+		*x = TARGET_X;
+		*y = TARGET_Y;
+	}
+}
+
+#include <X11/Xlib.h>
+
+Window XCreateWindow(display, parent, x, y, width, height, border_width, depth,
+	class, visual, valuemask, attributes)
+
+	 Display *display;
+	 Window parent;
+	 int x, y;
+	 unsigned int width, height;
+	 unsigned int border_width;
+	 int depth;
+	 unsigned int class;
+	 Visual *visual;
+	 unsigned long valuemask;
+	 XSetWindowAttributes *attributes;
+{
+	fixCoords(&x, &y, width, height);
+	return NEXT(xlib, "/usr/$LIB/libX11.so.6", XCreateWindow)
+		(display, parent, x, y, width, height, border_width, depth,
+			class, visual, valuemask, attributes);
+}
+
+Window XCreateSimpleWindow(display, parent, x, y, width, height, border_width,
+	border, background)
+	 Display *display;
+	 Window parent;
+	 int x, y;
+	 unsigned int width, height;
+	 unsigned int border_width;
+	 unsigned long border;
+	 unsigned long background;
+{
+	fixCoords(&x, &y, width, height);
+	//fprintf(stderr, "XCreateSimpleWindow(%d,%d,%d,%d)\n", x, y, width, height);
+	return NEXT(xlib, "/usr/$LIB/libX11.so.6", XCreateSimpleWindow)
+		(display, parent, x, y, width, height, border_width, border, background);
 }

@@ -1,5 +1,5 @@
 # dell4khack
-Hackbrary to hook calls to the RandR to fix the Dell 4k MST issue in quickiest and dirtiest way.
+Hackbrary to hook calls to the RandR to fix the 4k MST issue in quickiest and dirtiest way.
 
 # Usage
 Build the library:
@@ -7,18 +7,17 @@ Build the library:
 make
 ```
 
+The Makefile assumes you have a 64-bit system. You will need gcc-multilib to build the 32-bit version.
+
 # Installation
-Put
+This will install the libraries under `/usr/local/lib{32,64}`, and a script under `/etc/profile.d`:
+```bash
+make install
 ```
-export LD_PRELOAD=</full/path/to/dell4khack.so>
-```
-to your /etc/profile
 
 This should do the trick, however:
- * Youtube videos (and other flash-based apps) still unroll to a half of a monitor (I'm working on this)
- * It works for my integrated Intel video card (Intel HD Graphics 4600), I don't have Nvidia or AMD card to test
  * This is a hack, a more generic solution should be made (either inside Xorg or kernel)
- * I dit not test it with multiple monitors
+ * Some games seem to use other APIs and are not fixed by this hack.
 
 # License
 MIT

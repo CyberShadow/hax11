@@ -194,3 +194,52 @@ Status XGetWindowAttributes(display, w, window_attributes_return)
 	}
 	return result;
 }
+
+static void* sdl = NULL;
+
+struct SDL_Surface;
+
+struct SDL_Surface* SDL_SetVideoMode(int width, int height, int bpp, unsigned int flags)
+{
+	log_debug("SDL_SetVideomode(%d, %d)\n", width, height);
+#if 0
+	fixSize((unsigned int*)&width, (unsigned int*)&height);
+#endif
+	return NEXT(sdl, "/usr/lib/libSDL-1.2.so.0", SDL_SetVideoMode)
+		(width, height, bpp, flags);
+}
+
+typedef struct{ int16_t x, y; uint16_t w, h; } SDL_Rect;
+struct SDL_PixelFormat;
+
+SDL_Rect** SDL_ListModes(struct SDL_PixelFormat* format, uint32_t flags)
+{
+	SDL_Rect** result = NEXT(sdl, "/usr/lib/libSDL-1.2.so.0", SDL_ListModes)
+		(format, flags);
+
+	/* Check if there are any modes available */
+	if (result == (SDL_Rect**)0)
+		log_debug("SDL_ListModes: No modes available\n");
+	else
+	if (result == (SDL_Rect**)-1)
+		log_debug("SDL_ListModes: All modes available\n");
+	else
+	{
+		for (int i=0; result[i]; ++i)
+		{
+			log_debug("SDL_ListModes: %d x %d\n", result[i]->w, result[i]->h);
+
+#if 0
+			unsigned int w = result[i]->w;
+			unsigned int h = result[i]->h;
+			fixSize(&w, &h);
+			if (w != result[i]->w || h != result[i]->h)
+				log_debug(" -> %d x %d\n", w, h);
+			result[i]->w = w;
+			result[i]->h = h;
+#endif
+		}
+	}
+
+	return result;
+}

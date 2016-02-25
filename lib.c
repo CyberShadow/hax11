@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 #include <xcb/xcb.h>
 #include <xcb/randr.h>
@@ -241,5 +242,29 @@ SDL_Rect** SDL_ListModes(struct SDL_PixelFormat* format, uint32_t flags)
 		}
 	}
 
+	return result;
+}
+
+#include <X11/extensions/xf86vmode.h>
+
+Bool XF86VidModeGetModeLine(
+    Display *display,
+    int screen,
+    int *dotclock_return,
+    XF86VidModeModeLine *modeline)
+{
+	Bool result = NEXT(xlib, "/usr/$LIB/libX11.so.6", XF86VidModeGetModeLine)
+		(display, screen, dotclock_return, modeline);
+	if (result)
+	{
+		log_debug("XF86VidModeGetModeLine: %d x %d\n", modeline->hdisplay, modeline->vdisplay);
+		unsigned int w = modeline->hdisplay;
+		unsigned int h = modeline->vdisplay;
+		fixSize(&w, &h);
+		if (w != modeline->hdisplay || h != modeline->vdisplay)
+			log_debug(" -> %d x %d\n", w, h);
+		modeline->hdisplay = w;
+		modeline->vdisplay = h;
+	}
 	return result;
 }

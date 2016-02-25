@@ -177,7 +177,9 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 	return real;
 }
 
-static void fixSize(unsigned int* width, unsigned int* height)
+static void fixSize(
+	unsigned int* width,
+	unsigned int* height __attribute__ ((unused)))
 {
 	needConfig();
 	if (!config.resizeWindows)

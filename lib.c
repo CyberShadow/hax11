@@ -74,8 +74,10 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 			real->mode = real->rotation = real->num_outputs = 0;
 		}
 	} else {
-			real->x = real->y = real->width = real->height = 0; // disable
-			real->mode = real->rotation = real->num_outputs = 0;
+#if 0
+		real->x = real->y = real->width = real->height = 0; // disable
+		real->mode = real->rotation = real->num_outputs = 0;
+#endif
 	}
 
 	return real;

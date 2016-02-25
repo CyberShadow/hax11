@@ -1,4 +1,4 @@
-# dell4khack
+# mst4khack
 Hackbrary to hook calls to the RandR to fix the 4k MST issue in quickiest and dirtiest way.
 
 # Usage

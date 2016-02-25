@@ -17,7 +17,7 @@ static void log_error(const char *fmt, ...)
 
 	vfprintf(stderr, fmt, args);
 
-	FILE* f = fopen("/tmp/mst4khack.log", "wb");
+	FILE* f = fopen("/tmp/mst4khack.log", "ab");
 	if (f)
 	{
 		vfprintf(f, fmt, args);

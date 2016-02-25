@@ -7,29 +7,30 @@
 #include <dlfcn.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 
 #include <xcb/xcb.h>
 #include <xcb/randr.h>
 
-// Specify the X11 coordinates of your 4K monitor here.
-#define TARGET_X 1920
-#define TARGET_Y 0
+// ****************************************************************************
 
 static void log_error(const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-
 	vfprintf(stderr, fmt, args);
+	va_end(args);
 
 	FILE* f = fopen("/tmp/mst4khack.log", "ab");
 	if (f)
 	{
+		va_start(args, fmt);
 		vfprintf(f, fmt, args);
+		va_end(args);
 		fclose(f);
 	}
-
-	va_end(args);
 }
 
 #ifdef DEBUG
@@ -37,6 +38,90 @@ static void log_error(const char *fmt, ...)
 #else
 #define log_debug(...) do{}while(0)
 #endif
+
+// ****************************************************************************
+
+// Specify the X11 coordinates of your 4K monitor here.
+#define TARGET_X 1920
+#define TARGET_Y 0
+
+struct Config
+{
+	// Join MST panels
+	char joinMST;
+
+	/// Boolean - whether to hide the presence of other monitors
+	char maskOtherMonitors;
+
+	/// Boolean - whether to forcibly change the size of windows that span too many monitors
+	char resizeWindows;
+
+	/// Boolean - whether to forcibly move windows created at (0,0) to the primary monitor
+	char moveWindows;
+};
+
+static struct Config config;
+static char configLoaded = 0;
+
+static void readConfig(const char* fn)
+{
+	log_debug("Reading config from %s\n", fn);
+	FILE* f = fopen(fn, "a"); // Create empty file if it does not exist
+	if (!f)
+		return;
+
+	while (!feof(f))
+	{
+		char buf[1024];
+		if (!fgets(buf, sizeof(buf), f))
+			break;
+		char *p = strchr(buf, '=');
+		if (!p)
+			continue;
+		*p = 0;
+		p++;
+
+		if (!strcmp(buf, "JoinMST"))
+			config.joinMST = atoi(p);
+		else
+		if (!strcmp(buf, "MaskOtherMonitors"))
+			config.maskOtherMonitors = atoi(p);
+		else
+		if (!strcmp(buf, "ResizeWindows"))
+			config.resizeWindows = atoi(p);
+		else
+		if (!strcmp(buf, "MoveWindows"))
+			config.moveWindows = atoi(p);
+	}
+	fclose(f);
+	log_debug("Read config: %d %d %d %d\n", config.joinMST, config.maskOtherMonitors, config.resizeWindows, config.moveWindows);
+}
+
+static void needConfig()
+{
+	if (configLoaded)
+		return;
+	configLoaded = 1;
+
+	char buf[1024] = {0};
+	strncpy(buf, getenv("HOME"), sizeof(buf)-100);
+	strcat(buf, "/.config"	); mkdir(buf, 0700); // TODO: XDG_CONFIG_HOME
+	strcat(buf, "/mst4khack"); mkdir(buf, 0700);
+	strcat(buf, "/profiles"	); mkdir(buf, 0700);
+	char *p = buf + strlen(buf);
+
+	strcpy(p, "/default");
+	readConfig(buf);
+
+	readlink("/proc/self/exe", p, sizeof(buf) - (p-buf));
+	p++;
+	for (; *p; p++)
+		if (*p == '/')
+			*p = '\\';
+	readConfig(buf);
+}
+
+// ****************************************************************************
 
 #define NEXT(handle, path, func) ({								\
 			static typeof(&func) pfunc = NULL;					\
@@ -68,21 +153,25 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 	if (!real)
 		return real;
 
+	needConfig();
+
 	if (real->width == 1920 && real->height == 2160) { // Is 4K MST panel?
-		if (real->x == TARGET_X) { // Left panel
-			real->width = 1920 * 2; // resize
-			//real->height = 2160;
+		if (config.joinMST) {
+			if (real->x == TARGET_X) { // Left panel
+				real->width = 1920 * 2; // resize
+				//real->height = 2160;
+			}
+			else
+			if (real->x == TARGET_X + 1920) { // Right panel
+				real->x = real->y = real->width = real->height = 0; // disable
+				real->mode = real->rotation = real->num_outputs = 0;
+			}
 		}
-		else
-		if (real->x == TARGET_X + 1920) { // Right panel
+	} else {
+		if (config.maskOtherMonitors) {
 			real->x = real->y = real->width = real->height = 0; // disable
 			real->mode = real->rotation = real->num_outputs = 0;
 		}
-	} else {
-#if 0
-		real->x = real->y = real->width = real->height = 0; // disable
-		real->mode = real->rotation = real->num_outputs = 0;
-#endif
 	}
 
 	return real;
@@ -90,6 +179,10 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 
 static void fixSize(unsigned int* width, unsigned int* height)
 {
+	needConfig();
+	if (!config.resizeWindows)
+		return;
+
 	if (*width == 3840 + TARGET_X)
 		*width = 3840;
 }
@@ -97,6 +190,11 @@ static void fixSize(unsigned int* width, unsigned int* height)
 static void fixCoords(int* x, int* y, unsigned int *width, unsigned int *height)
 {
 	fixSize(width, height);
+
+	needConfig();
+	if (!config.moveWindows)
+		return;
+
 	if (*width == 3840 && *height == 2160)
 	{
 		*x = TARGET_X;
@@ -200,6 +298,7 @@ Status XGetWindowAttributes(display, w, window_attributes_return)
 	return result;
 }
 
+#if 0
 static void* sdl = NULL;
 
 struct SDL_Surface;
@@ -248,6 +347,7 @@ SDL_Rect** SDL_ListModes(struct SDL_PixelFormat* format, uint32_t flags)
 
 	return result;
 }
+#endif
 
 #include <X11/extensions/xf86vmode.h>
 

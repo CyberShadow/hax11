@@ -101,7 +101,7 @@ static void fixCoords(int* x, int* y, unsigned int *width, unsigned int *height)
 
 #include <X11/Xlib.h>
 
-void* xlib = NULL;
+static void* xlib = NULL;
 
 /*
   Fix for games that create the window of the wrong size or on the wrong monitor.

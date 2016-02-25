@@ -143,3 +143,47 @@ Window XCreateSimpleWindow(display, parent, x, y, width, height, border_width,
 	return NEXT(xlib, "/usr/$LIB/libX11.so.6", XCreateSimpleWindow)
 		(display, parent, x, y, width, height, border_width, border, background);
 }
+
+/*
+  Fix for games setting their window size based on the total display size
+  (which can encompass multiple physical monitors).
+*/
+Status XGetGeometry(display, d, root_return, x_return, y_return, width_return,
+                      height_return, border_width_return, depth_return)
+	 Display *display;
+	 Drawable d;
+	 Window *root_return;
+	 int *x_return, *y_return;
+	 unsigned int *width_return, *height_return;
+	 unsigned int *border_width_return;
+	 unsigned int *depth_return;
+{
+	log_debug("XGetGeometry(%d,%d,%d,%d)\n", *x_return, *y_return, *width_return, *height_return);
+	Status result = NEXT(xlib, "/usr/$LIB/libX11.so.6", XGetGeometry)
+		(display, d, root_return, x_return, y_return, width_return,
+			height_return, border_width_return, depth_return);
+	if (result)
+		fixSize(width_return, height_return);
+	return result;
+}
+
+/*
+  Fix for games setting their window size based on the X root window size
+  (which can encompass multiple physical monitors).
+*/
+Status XGetWindowAttributes(display, w, window_attributes_return)
+	 Display *display;
+	 Window w;
+	 XWindowAttributes *window_attributes_return;
+{
+	log_debug("XGetWindowAttributes(%d,%d,%d,%d)\n",
+		window_attributes_return->x, window_attributes_return->y,
+		window_attributes_return->width, window_attributes_return->height);
+	Status result = NEXT(xlib, "/usr/$LIB/libX11.so.6", XGetWindowAttributes)
+		(display, w, window_attributes_return);
+	if (result)
+		fixSize(
+			(unsigned int*)&window_attributes_return->width,
+			(unsigned int*)&window_attributes_return->height);
+	return result;
+}

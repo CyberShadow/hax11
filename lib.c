@@ -160,12 +160,15 @@ Status XGetGeometry(display, d, root_return, x_return, y_return, width_return,
 	 unsigned int *border_width_return;
 	 unsigned int *depth_return;
 {
-	log_debug("XGetGeometry(%d,%d,%d,%d)\n", *x_return, *y_return, *width_return, *height_return);
 	Status result = NEXT(xlib, "/usr/$LIB/libX11.so.6", XGetGeometry)
 		(display, d, root_return, x_return, y_return, width_return,
 			height_return, border_width_return, depth_return);
 	if (result)
+	{
+		log_debug("XGetGeometry(%d,%d,%d,%d)\n",
+			*x_return, *y_return, *width_return, *height_return);
 		fixSize(width_return, height_return);
+	}
 	return result;
 }
 
@@ -178,14 +181,16 @@ Status XGetWindowAttributes(display, w, window_attributes_return)
 	 Window w;
 	 XWindowAttributes *window_attributes_return;
 {
-	log_debug("XGetWindowAttributes(%d,%d,%d,%d)\n",
-		window_attributes_return->x, window_attributes_return->y,
-		window_attributes_return->width, window_attributes_return->height);
 	Status result = NEXT(xlib, "/usr/$LIB/libX11.so.6", XGetWindowAttributes)
 		(display, w, window_attributes_return);
 	if (result)
+	{
+		log_debug("XGetWindowAttributes(%d,%d,%d,%d)\n",
+			window_attributes_return->x, window_attributes_return->y,
+			window_attributes_return->width, window_attributes_return->height);
 		fixSize(
 			(unsigned int*)&window_attributes_return->width,
 			(unsigned int*)&window_attributes_return->height);
+	}
 	return result;
 }

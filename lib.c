@@ -47,19 +47,10 @@ static void log_error(const char *fmt, ...)
 
 struct Config
 {
-	/// Boolean - join MST panels and present them as one monitor
 	char joinMST;
-
-	/// Boolean - whether to hide the presence of other monitors
 	char maskOtherMonitors;
-
-	/// Boolean - whether to forcibly change the size of windows that span too many monitors
 	char resizeWindows;
-
-	/// Boolean - resize (stretch) all windows, not just those matching the size of one MST panel
 	char resizeAll;
-
-	/// Boolean - whether to forcibly move windows created at (0,0) to the primary monitor
 	char moveWindows;
 };
 

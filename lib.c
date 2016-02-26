@@ -188,13 +188,18 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 
 static void fixSize(
 	unsigned int* width,
-	unsigned int* height __attribute__ ((unused)))
+	unsigned int* height)
 {
 	needConfig();
 	if (!config.resizeWindows)
 		return;
 
+	// Fix windows spanning multiple monitors
 	if (*width == 3840 + TARGET_X)
+		*width = 3840;
+
+	// Fix spanning one half of a MST monitor
+	if (*width == 1920 && *height == 2160)
 		*width = 3840;
 }
 
@@ -202,7 +207,6 @@ static void fixCoords(int* x, int* y, unsigned int *width, unsigned int *height)
 {
 	fixSize(width, height);
 
-	needConfig();
 	if (!config.moveWindows)
 		return;
 

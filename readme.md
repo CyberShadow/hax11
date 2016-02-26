@@ -19,7 +19,7 @@ Log out/in or source the script to apply the hack.
 
 # Status
 Game                            | Status
----------------------------------------------------------------------------------
+------------------------------- | -----------------------------------------------
 10,000,000                      | Works (`MoveWindows + `ResizeWindows`)
 140                             | Works (`MoveWindows`)
 Adventures of Shuggy            | Works

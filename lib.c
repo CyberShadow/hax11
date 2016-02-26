@@ -80,11 +80,13 @@ static void readConfig(const char* fn)
 		char buf[1024];
 		if (!fgets(buf, sizeof(buf), f))
 			break;
+		//log_debug("Got line: %s'\n", buf);
 		char *p = strchr(buf, '=');
 		if (!p)
 			continue;
 		*p = 0;
 		p++;
+		//log_debug("Got line: '%s' = '%s'\n", buf, p);
 
 		if (!strcmp(buf, "JoinMST"))
 			config.joinMST = atoi(p);
@@ -160,6 +162,7 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 
 	needConfig();
 
+	log_debug("xcb_randr_get_crtc_info_reply(%d, %d)\n", real->width, real->height);
 	if (real->width == 1920 && real->height == 2160) { // Is 4K MST panel?
 		if (config.joinMST) {
 			if (real->x == TARGET_X) { // Left panel
@@ -178,6 +181,7 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 			real->mode = real->rotation = real->num_outputs = 0;
 		}
 	}
+	log_debug(" -> (%d, %d)\n", real->width, real->height);
 
 	return real;
 }

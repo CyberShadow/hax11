@@ -47,7 +47,7 @@ static void log_error(const char *fmt, ...)
 
 struct Config
 {
-	// Join MST panels
+	/// Boolean - join MST panels and present them as one monitor
 	char joinMST;
 
 	/// Boolean - whether to hide the presence of other monitors

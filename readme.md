@@ -62,6 +62,7 @@ Game                            | Status
 ------------------------------- | -----------------------------------------------
 10,000,000                      | Works (`MoveWindows + `ResizeWindows`)
 140                             | Works (`MoveWindows`)
+3089                            | TODO - Detected max. resolution is one panel despite `ResizeWindows` [Java]
 Adventures of Shuggy            | Works
 And Yet It Moves                | Entire desktop - SDL talks to X directly
 Anodyne                         | Needs Adobe Air
@@ -70,20 +71,52 @@ Aquaria (Steam)                 | TODO - Half-screen
 Aquaria (tarball)               | TODO - Wrong monitor
 Avadon: The Black Fortress      | TODO - Defaults to 1024x768; even with `MoveWindows` and after editing `~/.local/share/Avadon/Avadon.ini`, still uses up both screens
 Bad Hotel                       | No 4k option; screen is cut in the ~middle (looks like game bug)
+BIT.TRIP RUNNER                 | Does not actually have a Linux port on Steam
+Blueberry Garden                | TODO - Half-screen, resolution menu detects half screen
+Bridge Constructor Playground   | Works (`MoveWindows`)
 The Binding of Isaac: Rebirth   | Works
 Card City Nights                | Works (`MoveWindows`)
 Crimsonland                     | TODO - Half-screen
+Darwinia                        | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
+DEFCON                          | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
 Dota 2                          | OpenGL error (breakage looks unrelated)
 Dungeons of Dredmor             | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`, weird mouse bugs
 Dust: An Elysian Tail           | TODO - Detected max. resolution is one panel despite `ResizeWindows`
+Dynamite Jack                   | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
+Escape Goat                     | TODO - Odd AR (3:1?)
+Eversion                        | Works
 Garry's Mod                     | OpenGL error (breakage looks unrelated)
+Gigantic Army                   | Works
 Half-Life 2: Deathmatch         | OpenGL error (breakage looks unrelated)
+Hexcells                        | Works (`MoveWindows`)
+HyperRogue                      | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
+Intrusion 2                     | Works
 Jazzpunk                        | Works (`MoveWindows`, set game resolution to 4K)
+Lugaru HD                       | TODO - Doesn't want to go full screen
+Lume                            | TODO - Half-screen
 The Magic Circle                | Works (`MoveWindows`)
-Shatter                         | TODO? - Doesn't want to go screen
+Multiwinia                      | Doesn't start
+Osmos                           | Works
+Papers, Please                  | Works
+Perfection.                     | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
+Quest of Dungeons               | TODO - Doesn't want to go full screen
+Risk of Rain                    | Works
+Satazius                        | Works
+Sigils of Elohim                | No full screen?
+Snuggle Truck                   | Works
+Shatter                         | TODO - Doesn't want to go full screen
 Starbound                       | TODO - Starts centered on entire desktop despite `MoveWindows` and setting 4K resolution in `~/.local/share/Steam/steamapps/common/Starbound/giraffe_storage/starbound.config`
 Sunless Sea                     | Works (set game resolution to 1080p, `MoveWindows` + `ResizeWindows` + `ResizeAll`)
+Super Hexagon                   | TODO - Wrong screen
+Superfrog HD                    | FUBAR
+Teleglitch: DME                 | Works
+Teslagrad                       | Works (`MoveWindows`)
+Tiki Man                        | Works (`MoveWindows`)
+TIS-100                         | Works (`MoveWindows`)
 Terraria                        | Works
+Uplink                          | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
+VVVVVV                          | Works
+World of Goo                    | TODO - Entire desktop. Doesn't use any hooked APIs at all
 
 ## License
 MIT

@@ -56,6 +56,9 @@ struct Config
 	/// Boolean - whether to forcibly change the size of windows that span too many monitors
 	char resizeWindows;
 
+	/// Boolean - resize (stretch) all windows, not just those matching the size of one MST panel
+	char resizeAll;
+
 	/// Boolean - whether to forcibly move windows created at (0,0) to the primary monitor
 	char moveWindows;
 };
@@ -96,6 +99,9 @@ static void readConfig(const char* fn)
 		else
 		if (!strcmp(buf, "ResizeWindows"))
 			config.resizeWindows = atoi(p);
+		else
+		if (!strcmp(buf, "ResizeAll"))
+			config.resizeAll = atoi(p);
 		else
 		if (!strcmp(buf, "MoveWindows"))
 			config.moveWindows = atoi(p);
@@ -193,6 +199,12 @@ static void fixSize(
 	needConfig();
 	if (!config.resizeWindows)
 		return;
+
+	if (config.resizeAll && *width >= 640 && *height >= 480)
+	{
+		*width = 3840;
+		*height = 2160;
+	}
 
 	// Fix windows spanning multiple monitors
 	if (*width == 3840 + TARGET_X)

@@ -66,9 +66,14 @@ static char configLoaded = 0;
 static void readConfig(const char* fn)
 {
 	log_debug("Reading config from %s\n", fn);
-	FILE* f = fopen(fn, "a"); // Create empty file if it does not exist
+	FILE* f = fopen(fn, "r");
 	if (!f)
+	{
+		// Create empty file if it does not exist
+		f = fopen(fn, "w");
+		if (f) fclose(f);
 		return;
+	}
 
 	while (!feof(f))
 	{

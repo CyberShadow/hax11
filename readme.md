@@ -37,13 +37,18 @@ Supported configuration options:
 
 Name                  | Values  | Description
 --------------------- | ------- | ---------------------------------
+`MainX`/`Y`           | Number  | The X coordinate of your primary monitor
+`MainW`/`H`           | Number  | The resolution of your primary monitor
+`DesktopW`/`H`        | Number  | The resolution of your desktop (all monitors combined)
 `JoinMST`             | `0`/`1` | Boolean - Join MST panels and present them as one monitor to the application
 `MaskOtherMonitors`   | `0`/`1` | Boolean - Whether to hide the presence of other monitors from the application
 `ResizeWindows`       | `0`/`1` | Boolean - Whether to forcibly change the size of windows that span too many monitors
 `ResizeAll`           | `0`/`1` | Boolean - Resize (stretch) all windows, not just those matching the size of one MST panel
 `MoveWindows`         | `0`/`1` | Boolean - Whether to forcibly move windows created at (0,0) to the primary monitor
 
-A sensible configuration is to have `JoinMST=1`.
+A sensible configuration is to have `JoinMST=1` and the `Main*` / `Desktop*` settings in the `default` profile,
+and per-game settings in their executables' profiles.
+
 Beware that your window manager and shell use the same APIs,
 thus having other options enabled for such programs may make other monitors unusable.
 

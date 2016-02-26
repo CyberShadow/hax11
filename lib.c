@@ -41,12 +41,15 @@ static void log_error(const char *fmt, ...)
 
 // ****************************************************************************
 
-// Specify the X11 coordinates of your 4K monitor here.
-#define TARGET_X 1920
-#define TARGET_Y 0
-
 struct Config
 {
+	int mainX;
+	int mainY;
+	unsigned int mainW;
+	unsigned int mainH;
+	unsigned int desktopW;
+	unsigned int desktopH;
+
 	char joinMST;
 	char maskOtherMonitors;
 	char resizeWindows;
@@ -54,7 +57,7 @@ struct Config
 	char moveWindows;
 };
 
-static struct Config config;
+static struct Config config = {};
 static char configLoaded = 0;
 
 static void readConfig(const char* fn)
@@ -82,20 +85,23 @@ static void readConfig(const char* fn)
 		p++;
 		//log_debug("Got line: '%s' = '%s'\n", buf, p);
 
-		if (!strcmp(buf, "JoinMST"))
-			config.joinMST = atoi(p);
-		else
-		if (!strcmp(buf, "MaskOtherMonitors"))
-			config.maskOtherMonitors = atoi(p);
-		else
-		if (!strcmp(buf, "ResizeWindows"))
-			config.resizeWindows = atoi(p);
-		else
-		if (!strcmp(buf, "ResizeAll"))
-			config.resizeAll = atoi(p);
-		else
-		if (!strcmp(buf, "MoveWindows"))
-			config.moveWindows = atoi(p);
+		#define PARSE_INT(x)						\
+			if (!strcasecmp(buf, #x))				\
+				config.x = atoi(p);					\
+			else
+
+		PARSE_INT(mainX)
+		PARSE_INT(mainY)
+		PARSE_INT(mainW)
+		PARSE_INT(mainH)
+		PARSE_INT(desktopW)
+		PARSE_INT(desktopH)
+		PARSE_INT(joinMST)
+		PARSE_INT(maskOtherMonitors)
+		PARSE_INT(resizeWindows)
+		PARSE_INT(resizeAll)
+		PARSE_INT(moveWindows)
+			log_debug("Unknown option: %s\n", buf);
 	}
 	fclose(f);
 	log_debug("Read config: %d %d %d %d\n", config.joinMST, config.maskOtherMonitors, config.resizeWindows, config.moveWindows);
@@ -106,6 +112,14 @@ static void needConfig()
 	if (configLoaded)
 		return;
 	configLoaded = 1;
+
+	// Default settings
+	config.mainX = 1920;
+	config.mainY = 0;
+	config.mainW = 3840;
+	config.mainH = 2160;
+	config.desktopW = 3840+1920;
+	config.desktopH = 2160;
 
 	char buf[1024] = {0};
 	strncpy(buf, getenv("HOME"), sizeof(buf)-100);
@@ -162,12 +176,12 @@ xcb_randr_get_crtc_info_reply (xcb_connection_t                  *c  /**< */,
 	log_debug("xcb_randr_get_crtc_info_reply(%d, %d)\n", real->width, real->height);
 	if (real->width == 1920 && real->height == 2160) { // Is 4K MST panel?
 		if (config.joinMST) {
-			if (real->x == TARGET_X) { // Left panel
+			if (real->x == config.mainX) { // Left panel
 				real->width = 1920 * 2; // resize
 				//real->height = 2160;
 			}
 			else
-			if (real->x == TARGET_X + 1920) { // Right panel
+			if (real->x == config.mainX + 1920) { // Right panel
 				real->x = real->y = real->width = real->height = 0; // disable
 				real->mode = real->rotation = real->num_outputs = 0;
 			}
@@ -193,13 +207,13 @@ static void fixSize(
 
 	if (config.resizeAll && *width >= 640 && *height >= 480)
 	{
-		*width = 3840;
-		*height = 2160;
+		*width = config.mainW;
+		*height = config.mainH;
 	}
 
 	// Fix windows spanning multiple monitors
-	if (*width == 3840 + TARGET_X)
-		*width = 3840;
+	if (*width == config.desktopW)
+		*width = config.mainW;
 
 	// Fix spanning one half of a MST monitor
 	if (*width == 1920 && *height == 2160)
@@ -213,10 +227,10 @@ static void fixCoords(int* x, int* y, unsigned int *width, unsigned int *height)
 	if (!config.moveWindows)
 		return;
 
-	if (*width == 3840 && *height == 2160)
+	if (*width == config.mainW && *height == config.mainH)
 	{
-		*x = TARGET_X;
-		*y = TARGET_Y;
+		*x = config.mainX;
+		*y = config.mainY;
 	}
 }
 

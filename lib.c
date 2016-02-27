@@ -20,6 +20,7 @@ static void log_error(const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
+	fprintf(stderr, "mst4khack: ");
 	vfprintf(stderr, fmt, args);
 	va_end(args);
 

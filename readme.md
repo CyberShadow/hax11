@@ -40,6 +40,7 @@ Name                  | Values  | Description
 `MainX`/`Y`           | Number  | The X coordinate of your primary monitor
 `MainW`/`H`           | Number  | The resolution of your primary monitor
 `DesktopW`/`H`        | Number  | The resolution of your desktop (all monitors combined)
+`Debug`               | `0`/`1` | Boolean - Enable debugging output to stderr and `/tmp/mst4khack.log`
 `JoinMST`             | `0`/`1` | Boolean - Join MST panels and present them as one monitor to the application
 `MaskOtherMonitors`   | `0`/`1` | Boolean - Whether to hide the presence of other monitors from the application
 `ResizeWindows`       | `0`/`1` | Boolean - Whether to forcibly change the size of windows that span too many monitors

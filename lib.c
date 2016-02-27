@@ -34,11 +34,7 @@ static void log_error(const char *fmt, ...)
 	}
 }
 
-#ifdef DEBUG
-#define log_debug log_error
-#else
-#define log_debug(...) do{}while(0)
-#endif
+#define log_debug(...) do { if (config.debug) log_error(__VA_ARGS__); } while(0)
 
 // ****************************************************************************
 
@@ -51,6 +47,7 @@ struct Config
 	unsigned int desktopW;
 	unsigned int desktopH;
 
+	char debug;
 	char joinMST;
 	char maskOtherMonitors;
 	char resizeWindows;
@@ -63,7 +60,7 @@ static char configLoaded = 0;
 
 static void readConfig(const char* fn)
 {
-	log_debug("Reading config from %s\n", fn);
+	//log_debug("Reading config from %s\n", fn);
 	FILE* f = fopen(fn, "r");
 	if (!f)
 	{
@@ -97,16 +94,19 @@ static void readConfig(const char* fn)
 		PARSE_INT(mainH)
 		PARSE_INT(desktopW)
 		PARSE_INT(desktopH)
+		PARSE_INT(debug)
 		PARSE_INT(joinMST)
 		PARSE_INT(maskOtherMonitors)
 		PARSE_INT(resizeWindows)
 		PARSE_INT(resizeAll)
 		PARSE_INT(moveWindows)
-			log_debug("Unknown option: %s\n", buf);
+			log_error("Unknown option: %s\n", buf);
 	}
 	fclose(f);
-	log_debug("Read config: %d %d %d %d\n", config.joinMST, config.maskOtherMonitors, config.resizeWindows, config.moveWindows);
+	//log_debug("Read config: %d %d %d %d\n", config.joinMST, config.maskOtherMonitors, config.resizeWindows, config.moveWindows);
 }
+
+// ****************************************************************************
 
 static void needConfig()
 {

@@ -1,10 +1,10 @@
 # mst4khack
 Hackbrary to hook X11 API calls.
 
-Attempts to fix games and full-screen application issues, such as:
-- start on the wrong monitor
-- span too many monitors
-- span half of a 4K MST monitor
+Attempts to fix game and full-screen application issues on Linux, such as:
+- starting on the wrong monitor
+- spanning too many monitors
+- spanning one half of a 4K MST monitor
 
 ## Building
 Build the library:
@@ -37,8 +37,8 @@ Supported configuration options:
 
 Name                  | Values  | Description
 --------------------- | ------- | ---------------------------------
-`MainX`/`Y`           | Number  | The X coordinate of your primary monitor
-`MainW`/`H`           | Number  | The resolution of your primary monitor
+`MainX`/`Y`           | Number  | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
+`MainW`/`H`           | Number  | The resolution of your primary monitor (or total resolution of monitors to be used for games)
 `DesktopW`/`H`        | Number  | The resolution of your desktop (all monitors combined)
 `Debug`               | `0`/`1` | Boolean - Enable debugging output to stderr and `/tmp/mst4khack.log`
 `JoinMST`             | `0`/`1` | Boolean - Join MST panels and present them as one monitor to the application
@@ -61,7 +61,7 @@ $ LD_PRELOAD= xrandr
 ## Status
 Game                            | Status
 ------------------------------- | -----------------------------------------------
-10,000,000                      | Works (`MoveWindows + `ResizeWindows`)
+10,000,000                      | Works (`MoveWindows` + `ResizeWindows`)
 140                             | Works (`MoveWindows`)
 3089                            | TODO - Detected max. resolution is one panel despite `ResizeWindows` [Java]
 Adventures of Shuggy            | Works
@@ -116,6 +116,7 @@ Tiki Man                        | Works (`MoveWindows`)
 TIS-100                         | Works (`MoveWindows`)
 Terraria                        | Works
 Uplink                          | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
+Voxatron                        | TODO - Half-screen
 VVVVVV                          | Works
 World of Goo                    | TODO - Entire desktop. Doesn't use any hooked APIs at all
 

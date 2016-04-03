@@ -75,6 +75,8 @@ static void readConfig(const char* fn)
 		char buf[1024];
 		if (!fgets(buf, sizeof(buf), f))
 			break;
+		if (buf[0] == '#')
+			continue;
 		//log_debug("Got line: %s'\n", buf);
 		char *p = strchr(buf, '=');
 		if (!p)

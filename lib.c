@@ -407,3 +407,169 @@ Bool XF86VidModeGetModeLine(
 	}
 	return result;
 }
+
+#if 0
+
+static void handleXSend(void* data, size_t len)
+{
+	(void)data;(void)len;
+	if (len < 4 || len % 4 != 0)
+	{
+		log_debug("Ack! Invalid request length (%d)\n", len);
+		return;
+	}
+	unsigned short hdrLen = 4 * *(unsigned short*)(data+1);
+	if (hdrLen != len)
+	{
+		log_debug("Ack! Mismatching packet length (%d != %d)\n", hdrLen, len);
+		return;
+	}
+}
+
+static void handleXRecv(void* data, size_t len)
+{
+	(void)data;(void)len;
+}
+
+static void* libc = NULL;
+
+#include <sys/socket.h>
+#include <sys/un.h>
+
+static int x11sock = 0;
+
+int connect(int socket, const struct sockaddr *address,
+	socklen_t address_len)
+{
+	int result = NEXT(libc, "/usr/lib/libc.so", connect)
+		(socket, address, address_len);
+	if (result == 0)
+	{
+		if (address->sa_family == AF_UNIX)
+		{
+			struct sockaddr_un *ua = (struct sockaddr_un*)address;
+			const char* path = ua->sun_path;
+			if (!*path)
+				path++;
+			needConfig();
+			log_debug("connect(%s,%d)\n", path, address_len);
+			if (!strncmp(path, "/tmp/.X11-unix/X", 16))
+			{
+				log_debug("Found X connection!\n");
+				x11sock = socket;
+			}
+		}
+	}
+	return result;
+}
+
+ssize_t read(int fildes, void *buf, size_t nbyte)
+{
+	ssize_t result = NEXT(libc, "/usr/lib/libc.so", read)
+		(fildes, buf, nbyte);
+	if (result > 0 && x11sock && fildes == x11sock)
+	{
+		log_debug("x11sock read! (%d bytes)\n", result);
+		handleXRecv(buf, result);
+	}
+	return result;
+}
+
+ssize_t recv(int socket, void *buffer, size_t length, int flags)
+{
+	ssize_t result = NEXT(libc, "/usr/lib/libc.so", recv)
+		(socket, buffer, length, flags);
+	if (result > 0 && x11sock && socket == x11sock)
+	{
+		log_debug("x11sock recv! (%d bytes)\n", result);
+		handleXRecv(buffer, result);
+	}
+	return result;
+}
+
+ssize_t recvmsg(int socket, struct msghdr *message, int flags)
+{
+	ssize_t result = NEXT(libc, "/usr/lib/libc.so", recvmsg)
+		(socket, message, flags);
+	if (result > 0 && x11sock && socket == x11sock)
+	{
+		log_debug("x11sock recvmsg! (%d bytes)\n", result);
+		if (message->msg_iovlen != 1)
+			log_debug("Ack! Bad msg_iovlen (%d)!\n", message->msg_iovlen);
+		handleXRecv(message->msg_iov[0].iov_base, message->msg_iov[0].iov_len);
+	}
+	return result;
+}
+
+ssize_t send(int socket, const void *buffer, size_t length, int flags)
+{
+	if (x11sock && socket == x11sock)
+		handleXSend((void*)buffer, length);
+	ssize_t result = NEXT(libc, "/usr/lib/libc.so", send)
+		(socket, buffer, length, flags);
+	if (result > 0 && x11sock && socket == x11sock)
+	{
+		log_debug("x11sock send! (%d bytes)\n", result);
+		if ((size_t)result != length)
+			log_debug("Ack! result != length\n");
+	}
+	return result;
+}
+
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)
+{
+	if (x11sock && sockfd == x11sock)
+	{
+		if (msg->msg_iovlen != 1)
+			log_debug("Ack! Bad msg_iovlen (%d)!\n", msg->msg_iovlen);
+		else
+			handleXSend(msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len);
+	}
+
+	ssize_t result = NEXT(libc, "/usr/lib/libc.so", sendmsg)
+		(sockfd, msg, flags);
+	if (result > 0 && x11sock && sockfd == x11sock)
+	{
+		log_debug("x11sock sendmsg! (%d bytes)\n", result);
+		if (msg->msg_iovlen == 1 && msg->msg_iov[0].iov_len != (size_t)result)
+			log_debug("Ack! result != length\n");
+	}
+	return result;
+}
+
+ssize_t write(int fildes, const void *buf, size_t nbyte)
+{
+	if (x11sock && fildes == x11sock)
+		handleXSend((void*)buf, nbyte);
+	ssize_t result = NEXT(libc, "/usr/lib/libc.so", write)
+		(fildes, buf, nbyte);
+	if (result > 0 && x11sock && fildes == x11sock)
+	{
+		log_debug("x11sock write! (%d bytes)\n", result);
+		if ((size_t)result != nbyte)
+			log_debug("Ack! result != length\n");
+	}
+	return result;
+}
+
+ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
+{
+	if (x11sock && fd == x11sock)
+	{
+		for (int i=0; i<iovcnt; i++)
+			handleXSend(iov[i].iov_base, iov[i].iov_len);
+	}
+	ssize_t result = NEXT(libc, "/usr/lib/libc.so", writev)
+		(fd, iov, iovcnt);
+	if (result > 0 && x11sock && fd == x11sock)
+	{
+		log_debug("x11sock writev! (%d iovs):\n", iovcnt);
+		for (int i=0; i<iovcnt; i++)
+			log_debug("\t%d\n", iov[i].iov_len);
+		/* for (ssize_t i=0; i<result; i++) */
+		/* 	 log_debug("%02X ", ((char*)buffer)[i]); */
+		/* log_debug("\n"); */
+	}
+	return result;
+}
+#endif

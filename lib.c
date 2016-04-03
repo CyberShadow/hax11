@@ -47,6 +47,7 @@ struct Config
 	unsigned int desktopW;
 	unsigned int desktopH;
 
+	char enable;
 	char debug;
 	char joinMST;
 	char maskOtherMonitors;
@@ -96,6 +97,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(mainH)
 		PARSE_INT(desktopW)
 		PARSE_INT(desktopH)
+		PARSE_INT(enable)
 		PARSE_INT(debug)
 		PARSE_INT(joinMST)
 		PARSE_INT(maskOtherMonitors)
@@ -410,33 +412,49 @@ Bool XF86VidModeGetModeLine(
 
 #if 0
 
-static void handleXSend(void* data, size_t len)
+typedef struct
 {
-	(void)data;(void)len;
-	if (len < 4 || len % 4 != 0)
+	int server, client;
+} X11ConnData;
+
+#include <sys/socket.h>
+
+static void* x11connThreadReadProc(void* dataPtr)
+{
+	X11ConnData* data = (X11ConnData*)dataPtr;
+	while (1)
 	{
-		log_debug("Ack! Invalid request length (%d)\n", len);
-		return;
+		static char buf[1024];
+		int len = recv(data->client, buf, sizeof(buf), 0);
+		if (len > 0)
+			send(data->server, buf, len, 0);
+		else
+			break;
 	}
-	unsigned short hdrLen = 4 * *(unsigned short*)(data+1);
-	if (hdrLen != len)
-	{
-		log_debug("Ack! Mismatching packet length (%d != %d)\n", hdrLen, len);
-		return;
-	}
+	close(data->server);
+	return NULL;
 }
 
-static void handleXRecv(void* data, size_t len)
+static void* x11connThreadWriteProc(void* dataPtr)
 {
-	(void)data;(void)len;
+	X11ConnData* data = (X11ConnData*)dataPtr;
+	while (1)
+	{
+		static char buf[1024];
+		int len = recv(data->server, buf, sizeof(buf), 0);
+		if (len > 0)
+			send(data->client, buf, len, 0);
+		else
+			break;
+	}
+	close(data->client);
+	return NULL;
 }
 
 static void* libc = NULL;
 
-#include <sys/socket.h>
 #include <sys/un.h>
-
-static int x11sock = 0;
+#include <pthread.h>
 
 int connect(int socket, const struct sockaddr *address,
 	socklen_t address_len)
@@ -456,11 +474,49 @@ int connect(int socket, const struct sockaddr *address,
 			if (!strncmp(path, "/tmp/.X11-unix/X", 16))
 			{
 				log_debug("Found X connection!\n");
-				x11sock = socket;
+				if (config.enable)
+				{
+					log_debug("Intercepting X connection!\n");
+					int pair[2];
+					socketpair(AF_UNIX, SOCK_STREAM, 0, pair);
+
+					X11ConnData* data = malloc(sizeof(X11ConnData));
+					data->server = dup(socket);
+					data->client = pair[0];
+					dup2(pair[1], socket);
+					close(pair[1]);
+
+					pthread_t thread;
+					pthread_create(&thread, NULL, x11connThreadReadProc, data);
+					pthread_create(&thread, NULL, x11connThreadWriteProc, data);
+				}
 			}
 		}
 	}
 	return result;
+}
+
+#if 0
+
+static void handleXSend(void* data, size_t len)
+{
+	(void)data;(void)len;
+	if (len < 4 || len % 4 != 0)
+	{
+		log_debug("Ack! Invalid request length (%d)\n", len);
+		return;
+	}
+	unsigned short hdrLen = 4 * *(unsigned short*)(data+1);
+	if (hdrLen != len)
+	{
+		log_debug("Ack! Mismatching packet length (%d != %d)\n", hdrLen, len);
+		return;
+	}
+}
+
+static void handleXRecv(void* data, size_t len)
+{
+	(void)data;(void)len;
 }
 
 ssize_t read(int fildes, void *buf, size_t nbyte)
@@ -572,4 +628,5 @@ ssize_t writev(int fd, const struct iovec *iov, int iovcnt)
 	}
 	return result;
 }
+#endif
 #endif

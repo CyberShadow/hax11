@@ -33,7 +33,8 @@ static void log_error(const char *fmt, ...)
 	}
 }
 
-#define log_debug(...) do { if (config.debug) log_error(__VA_ARGS__); } while(0)
+#define log_debug(...) do { if (config.debug >= 1) log_error(__VA_ARGS__); } while(0)
+#define log_debug2(...) do { if (config.debug >= 2) log_error(__VA_ARGS__); } while(0)
 
 // ****************************************************************************
 
@@ -200,11 +201,6 @@ static void fixCoords(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 	}
 }
 
-typedef struct
-{
-	int server, client;
-} X11ConnData;
-
 #include <sys/socket.h>
 
 static char sendAll(int fd, const void* buf, size_t length)
@@ -253,13 +249,13 @@ static const char* requestNames[256] =
 	"MapWindow",
 	"MapSubwindows",
 	"UnmapWindow", // 10
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	"UnmapSubwindows",
+	"ConfigureWindow",
+	"CirculateWindow",
+	"GetGeometry",
+	"QueryTree",
+	"InternAtom",
+	"GetAtomName",
 	"ChangeProperty",
 	NULL,
 	NULL, // 20
@@ -297,7 +293,7 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	NULL,
+	"CreateGC",
 	NULL,
 	NULL,
 	NULL,
@@ -340,7 +336,7 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	NULL,
+	"QueryExtension",
 	NULL,
 	NULL, // 100
 	NULL,
@@ -357,7 +353,7 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	NULL,
+	"ForceScreenSaver",
 	NULL,
 	NULL,
 	NULL,
@@ -463,6 +459,12 @@ static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
 	}
 }
 
+typedef struct
+{
+	int server, client;
+	unsigned char requests[1<<16];
+} X11ConnData;
+
 static void* x11connThreadReadProc(void* dataPtr)
 {
 	X11ConnData* data = (X11ConnData*)dataPtr;
@@ -484,8 +486,12 @@ static void* x11connThreadReadProc(void* dataPtr)
 	if (!recvAll(data->client, buf, pad(header.nbytesAuthString))) goto done;
 	if (!sendAll(data->server, buf, pad(header.nbytesAuthString))) goto done;
 
+	unsigned short sequenceNumber = 0;
+
 	while (1)
 	{
+		sequenceNumber++;
+
 		size_t ofs = 0;
 		if (!recvAll(data->client, buf+ofs, sz_xReq)) goto done;
 		ofs += sz_xReq;
@@ -498,17 +504,27 @@ static void* x11connThreadReadProc(void* dataPtr)
 			requestLength = *(uint*)(buf+ofs) * 4;
 			ofs += 4;
 		}
-		//log_debug("Request %d (%s) with length %d\n", req->reqType, requestNames[req->reqType], requestLength);
+		log_debug2("Request %d (%s) with length %d\n", req->reqType, requestNames[req->reqType], requestLength);
 		bufSize(&buf, &bufLen, requestLength);
 
 		if (!recvAll(data->client, buf+ofs, requestLength - ofs)) goto done;
 
+		data->requests[sequenceNumber] = 0;
 		switch (req->reqType)
 		{
+			// Fix for games that create the window of the wrong size or on the wrong monitor.
 			case X_CreateWindow:
 			{
 				xCreateWindowReq* req = (xCreateWindowReq*)buf;
 				fixCoords(&req->x, &req->y, &req->width, &req->height);
+				break;
+			}
+
+			// Fix for games setting their window size based on the X root window size
+			// (which can encompass multiple physical monitors).
+			case X_GetGeometry:
+			{
+				data->requests[sequenceNumber] = req->reqType;
 				break;
 			}
 		}
@@ -554,7 +570,23 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			if (!recvAll(data->server, buf+ofs, dataLength)) goto done;
 			ofs += dataLength;
 		}
-		//log_debug(" Response: %d\n", reply->generic.type);
+		log_debug2(" Response: %d sequenceNumber=%d\n", reply->generic.type, reply->generic.sequenceNumber);
+
+		if (reply->generic.type == X_Reply)
+		{
+			switch (data->requests[reply->generic.sequenceNumber])
+			{
+				case X_GetGeometry:
+				{
+					xGetGeometryReply* reply = (xGetGeometryReply*)buf;
+					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
+					fixCoords(&reply->x, &reply->y, &reply->width, &reply->height);
+					log_debug2("  ->          (%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
+					break;
+				}
+			}
+		}
+
 		if (!sendAll(data->client, buf, ofs)) goto done;
 	}
 done:
@@ -591,7 +623,7 @@ int connect(int socket, const struct sockaddr *address,
 					int pair[2];
 					socketpair(AF_UNIX, SOCK_STREAM, 0, pair);
 
-					X11ConnData* data = malloc(sizeof(X11ConnData));
+					X11ConnData* data = calloc(1, sizeof(X11ConnData));
 					data->server = dup(socket);
 					data->client = pair[0];
 					dup2(pair[1], socket);

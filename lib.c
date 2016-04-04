@@ -11,6 +11,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include <X11/Xproto.h>
+
 // ****************************************************************************
 
 static void log_error(const char *fmt, ...)
@@ -162,8 +164,8 @@ static void needConfig()
 		})
 
 static void fixSize(
-	unsigned int* width,
-	unsigned int* height)
+	CARD16* width,
+	CARD16* height)
 {
 	needConfig();
 	if (!config.resizeWindows)
@@ -184,7 +186,7 @@ static void fixSize(
 		*width = 3840;
 }
 
-static void fixCoords(int* x, int* y, unsigned int *width, unsigned int *height)
+static void fixCoords(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 {
 	fixSize(width, height);
 
@@ -461,8 +463,6 @@ static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
 	}
 }
 
-#include <X11/Xproto.h>
-
 static void* x11connThreadReadProc(void* dataPtr)
 {
 	X11ConnData* data = (X11ConnData*)dataPtr;
@@ -497,11 +497,22 @@ static void* x11connThreadReadProc(void* dataPtr)
 			recvAll(data->client, buf+ofs, 4);
 			requestLength = *(uint*)(buf+ofs) * 4;
 			ofs += 4;
-			bufSize(&buf, &bufLen, requestLength);
 		}
-		log_debug("Request %d (%s) with length %d\n", req->reqType, requestNames[req->reqType], requestLength);
+		//log_debug("Request %d (%s) with length %d\n", req->reqType, requestNames[req->reqType], requestLength);
+		bufSize(&buf, &bufLen, requestLength);
 
 		if (!recvAll(data->client, buf+ofs, requestLength - ofs)) goto done;
+
+		switch (req->reqType)
+		{
+			case X_CreateWindow:
+			{
+				xCreateWindowReq* req = (xCreateWindowReq*)buf;
+				fixCoords(&req->x, &req->y, &req->width, &req->height);
+				break;
+			}
+		}
+
 		if (!sendAll(data->server, buf, requestLength)) goto done;
 	}
 done:
@@ -543,7 +554,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			if (!recvAll(data->server, buf+ofs, dataLength)) goto done;
 			ofs += dataLength;
 		}
-		log_debug(" Response: %d\n", reply->generic.type);
+		//log_debug(" Response: %d\n", reply->generic.type);
 		if (!sendAll(data->client, buf, ofs)) goto done;
 	}
 done:

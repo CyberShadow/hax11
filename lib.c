@@ -410,7 +410,7 @@ Bool XF86VidModeGetModeLine(
 	return result;
 }
 
-#if 0
+#if 1
 
 typedef struct
 {
@@ -419,18 +419,331 @@ typedef struct
 
 #include <sys/socket.h>
 
+static char sendAll(int fd, const void* buf, size_t length)
+{
+	int remaining = length;
+	while (remaining)
+	{
+		int len = send(fd, buf, remaining, 0);
+		if (len <= 0)
+			return 0;
+		buf += len;
+		remaining -= len;
+	}
+	return 1;
+}
+
+static char recvAll(int fd, void* buf, size_t length)
+{
+	int remaining = length;
+	while (remaining)
+	{
+		int len = recv(fd, buf, remaining, 0);
+		if (len <= 0)
+			return 0;
+		buf += len;
+		remaining -= len;
+	}
+	return 1;
+}
+
+typedef struct
+{
+	char byteOrder;
+	char pad1;
+	CARD16 majorVersion, minorVersion;
+	ushort authNameLen, authDataLen;
+	ushort pad2;
+} X11ConnSetupHeader;
+
+static size_t pad(size_t n)
+{
+	return (n+3) & ~3;
+}
+
+static const char* requestNames[256] =
+{
+	NULL, // 0
+	"CreateWindow",
+	"ChangeWindowAttributes",
+	"GetWindowAttributes",
+	"DestroyWindow",
+	"DestroySubWindows",
+	"ChangeSaveSet",
+	"ReparentWindow",
+	"MapWindow",
+	"MapSubwindows",
+	"UnmapWindow", // 10
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	"ChangeProperty",
+	NULL,
+	NULL, // 20
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 30
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 40
+	NULL,
+	NULL,
+	"GetInputFocus",
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 50
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 60
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 70
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 80
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 90
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 100
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 110
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	"GetModifierMapping",
+	NULL, // 120
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	"NoOperation",
+	NULL,
+	NULL,
+	NULL, // 130
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 140
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 150
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 160
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 170
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 180
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 190
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL, // 200
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+};
+
+static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
+{
+	if (needed > *len)
+	{
+		*ptr = realloc(*ptr, needed);
+		*len = needed;
+	}
+}
+
 static void* x11connThreadReadProc(void* dataPtr)
 {
 	X11ConnData* data = (X11ConnData*)dataPtr;
+	unsigned char *buf = NULL;
+	size_t bufLen = 0;
+	bufSize(&buf, &bufLen, 1<<16);
+
+	X11ConnSetupHeader header;
+	if (!recvAll(data->client, &header, sizeof(header))) goto done;
+	if (header.byteOrder != 'l')
+	{
+		log_debug("Unsupported byte order %c!\n", header.byteOrder);
+		goto done;
+	}
+	if (!sendAll(data->server, &header, sizeof(header))) goto done;
+
+	if (!recvAll(data->client, buf, pad(header.authNameLen))) goto done;
+	if (!sendAll(data->server, buf, pad(header.authNameLen))) goto done;
+	if (!recvAll(data->client, buf, pad(header.authDataLen))) goto done;
+	if (!sendAll(data->server, buf, pad(header.authDataLen))) goto done;
+	/*
 	while (1)
 	{
-		static char buf[1024];
 		int len = recv(data->client, buf, sizeof(buf), 0);
+		printf("%d\n", len);
 		if (len > 0)
 			send(data->server, buf, len, 0);
 		else
 			break;
+
+		char strbuf[1<<16];
+		char *str = strbuf;
+		for (int i=0;i<len;i++)
+			str += sprintf(str, "%02X ", buf[i]);
+		printf("Bytes received: %s\n", strbuf);
+		break;
 	}
+	goto done;
+	*/
+	while (1)
+	{
+		unsigned char *ptr = buf;
+		if (!recvAll(data->client, ptr, 4)) goto done;
+		ptr += 4;
+
+		unsigned char majorOpcode = buf[0];
+		uint requestLength = *(ushort*)(buf+2) * 4;
+		if (requestLength == 0) // Big Requests Extension
+		{
+			recvAll(data->client, ptr, 4);
+			requestLength = *(uint*)ptr * 4;
+			ptr += 4;
+			bufSize(&buf, &bufLen, requestLength);
+		}
+		log_debug("Request %d (%s) with length %d\n", majorOpcode, requestNames[majorOpcode], requestLength);
+
+		if (!recvAll(data->client, ptr, requestLength - (ptr-buf))) goto done;
+		if (!sendAll(data->server, buf, requestLength)) goto done;
+	}
+done:
 	close(data->server);
 	return NULL;
 }
@@ -440,7 +753,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 	X11ConnData* data = (X11ConnData*)dataPtr;
 	while (1)
 	{
-		static char buf[1024];
+		char buf[1024];
 		int len = recv(data->server, buf, sizeof(buf), 0);
 		if (len > 0)
 			send(data->client, buf, len, 0);

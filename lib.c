@@ -410,7 +410,7 @@ Bool XF86VidModeGetModeLine(
 	return result;
 }
 
-#if 1
+#if 0
 
 typedef struct
 {

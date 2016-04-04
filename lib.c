@@ -675,14 +675,7 @@ static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
 	}
 }
 
-typedef struct
-{
-	char byteOrder;
-	char pad1;
-	CARD16 majorVersion, minorVersion;
-	ushort authNameLen, authDataLen;
-	ushort pad2;
-} X11SetupRequestHeader;
+#include <X11/Xproto.h>
 
 static void* x11connThreadReadProc(void* dataPtr)
 {
@@ -691,19 +684,19 @@ static void* x11connThreadReadProc(void* dataPtr)
 	size_t bufLen = 0;
 	bufSize(&buf, &bufLen, 1<<16);
 
-	X11SetupRequestHeader header;
+	xConnClientPrefix header;
 	if (!recvAll(data->client, &header, sizeof(header))) goto done;
 	if (header.byteOrder != 'l')
 	{
 		log_debug("Unsupported byte order %c!\n", header.byteOrder);
 		goto done;
 	}
-	if (!sendAll(data->server, &header, sizeof(header))) goto done;
+	if (!sendAll(data->server, &header, sz_xConnClientPrefix)) goto done;
 
-	if (!recvAll(data->client, buf, pad(header.authNameLen))) goto done;
-	if (!sendAll(data->server, buf, pad(header.authNameLen))) goto done;
-	if (!recvAll(data->client, buf, pad(header.authDataLen))) goto done;
-	if (!sendAll(data->server, buf, pad(header.authDataLen))) goto done;
+	if (!recvAll(data->client, buf, pad(header.nbytesAuthProto))) goto done;
+	if (!sendAll(data->server, buf, pad(header.nbytesAuthProto))) goto done;
+	if (!recvAll(data->client, buf, pad(header.nbytesAuthString))) goto done;
+	if (!sendAll(data->server, buf, pad(header.nbytesAuthString))) goto done;
 
 	/*
 	while (1)
@@ -728,11 +721,11 @@ static void* x11connThreadReadProc(void* dataPtr)
 	while (1)
 	{
 		size_t ofs = 0;
-		if (!recvAll(data->client, buf+ofs, 4)) goto done;
-		ofs += 4;
+		if (!recvAll(data->client, buf+ofs, sz_xReq)) goto done;
+		ofs += sz_xReq;
 
-		unsigned char majorOpcode = buf[0];
-		uint requestLength = *(ushort*)(buf+2) * 4;
+		const xReq* req = (xReq*)buf;
+		uint requestLength = req->length * 4;
 		if (requestLength == 0) // Big Requests Extension
 		{
 			recvAll(data->client, buf+ofs, 4);
@@ -740,7 +733,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 			ofs += 4;
 			bufSize(&buf, &bufLen, requestLength);
 		}
-		log_debug("Request %d (%s) with length %d\n", majorOpcode, requestNames[majorOpcode], requestLength);
+		log_debug("Request %d (%s) with length %d\n", req->reqType, requestNames[req->reqType], requestLength);
 
 		if (!recvAll(data->client, buf+ofs, requestLength - ofs)) goto done;
 		if (!sendAll(data->server, buf, requestLength)) goto done;
@@ -750,13 +743,6 @@ done:
 	return NULL;
 }
 
-typedef struct
-{
-	char status;
-	char pad1[5];
-	ushort additionalDataLength;
-} X11SetupResponseHeader;
-
 static void* x11connThreadWriteProc(void* dataPtr)
 {
 	X11ConnData* data = (X11ConnData*)dataPtr;
@@ -765,31 +751,33 @@ static void* x11connThreadWriteProc(void* dataPtr)
 	size_t bufLen = 0;
 
 	{
-		X11SetupResponseHeader header;
-		if (!recvAll(data->server, &header, sizeof(header))) goto done;
-		if (!sendAll(data->client, &header, sizeof(header))) goto done;
+		xConnSetupPrefix header;
+		if (!recvAll(data->server, &header, sz_xConnSetupPrefix)) goto done;
+		if (!sendAll(data->client, &header, sz_xConnSetupPrefix)) goto done;
 
-		log_debug("Server connection setup reply: %d\n", header.status);
+		log_debug("Server connection setup reply: %d\n", header.success);
 
-		size_t dataLength = header.additionalDataLength * 4;
+		size_t dataLength = header.length * 4;
 		bufSize(&buf, &bufLen, dataLength);
 		if (!recvAll(data->server, buf, dataLength)) goto done;
 		if (!sendAll(data->client, buf, dataLength)) goto done;
 	}
 
-	bufSize(&buf, &bufLen, 32);
+	bufSize(&buf, &bufLen, sz_xReply);
 	while (1)
 	{
-		if (!recvAll(data->server, buf, 32)) goto done;
-		size_t ofs = 32;
-		if (buf[0] == 1) // Reply
+		if (!recvAll(data->server, buf, sz_xReply)) goto done;
+		size_t ofs = sz_xReply;
+		const xReply* reply = (xReply*)buf;
+
+		if (reply->generic.type == X_Reply)
 		{
-			size_t dataLength = *(unsigned int*)(buf+4) * 4;
+			size_t dataLength = reply->generic.length * 4;
 			bufSize(&buf, &bufLen, ofs + dataLength);
 			if (!recvAll(data->server, buf+ofs, dataLength)) goto done;
 			ofs += dataLength;
 		}
-		log_debug(" Response: %d\n", buf[0]);
+		log_debug(" Response: %d\n", reply->generic.type);
 		if (!sendAll(data->client, buf, ofs)) goto done;
 	}
 done:

@@ -12,6 +12,14 @@
 #include <sys/stat.h>
 
 #include <X11/Xproto.h>
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#include <X11/Xutil.h>
+#include <X11/extensions/xf86vmode.h>
+#include <X11/extensions/xf86vmproto.h>
+#include <X11/extensions/randr.h>
+#include <X11/extensions/randrproto.h>
+#include <X11/extensions/panoramiXproto.h>
 
 // ****************************************************************************
 
@@ -35,6 +43,15 @@ static void log_error(const char *fmt, ...)
 
 #define log_debug(...) do { if (config.debug >= 1) log_error(__VA_ARGS__); } while(0)
 #define log_debug2(...) do { if (config.debug >= 2) log_error(__VA_ARGS__); } while(0)
+
+static const int actualX = 1920;
+static const int actualY = 2160;
+
+/* static const int actualX = 1920*3; */
+/* static const int actualY = 1080*2; */
+
+/* static const int actualX = 1920; */
+/* static const int actualY = 1200; */
 
 // ****************************************************************************
 
@@ -459,11 +476,43 @@ static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
 	}
 }
 
+int strmemcmp(const char* str, const void* mem, size_t meml)
+{
+	size_t strl = strlen(str);
+	if (strl != meml)
+		return strl - meml;
+	return memcmp(str, mem, meml);
+}
+
 typedef struct
 {
+	int index;
 	int server, client;
-	unsigned char requests[1<<16];
+	unsigned char notes[1<<16];
+	unsigned char opcode_XFree86_VidModeExtension;
+	unsigned char opcode_RANDR;
+	unsigned char opcode_Xinerama;
+	unsigned char opcode_NV_GLX;
 } X11ConnData;
+
+enum
+{
+	Note_None,
+	Note_X_GetGeometry,
+	Note_X_InternAtom_Other,
+	Note_X_QueryExtension_XFree86_VidModeExtension,
+	Note_X_QueryExtension_RANDR,
+	Note_X_QueryExtension_Xinerama,
+	Note_X_QueryExtension_NV_GLX,
+	Note_X_QueryExtension_Other,
+	Note_X_XF86VidModeGetModeLine,
+	Note_X_XF86VidModeGetAllModeLines,
+	Note_X_RRGetScreenInfo,
+	Note_X_RRGetScreenResources,
+	Note_X_RRGetCrtcInfo,
+	Note_X_XineramaQueryScreens,
+	Note_NV_GLX,
+};
 
 static void* x11connThreadReadProc(void* dataPtr)
 {
@@ -504,19 +553,58 @@ static void* x11connThreadReadProc(void* dataPtr)
 			requestLength = *(uint*)(buf+ofs) * 4;
 			ofs += 4;
 		}
-		log_debug2("Request %d (%s) with length %d\n", req->reqType, requestNames[req->reqType], requestLength);
+		log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
 		bufSize(&buf, &bufLen, requestLength);
 
 		if (!recvAll(data->client, buf+ofs, requestLength - ofs)) goto done;
 
-		data->requests[sequenceNumber] = 0;
+		data->notes[sequenceNumber] = Note_None;
 		switch (req->reqType)
 		{
 			// Fix for games that create the window of the wrong size or on the wrong monitor.
 			case X_CreateWindow:
 			{
 				xCreateWindowReq* req = (xCreateWindowReq*)buf;
+				log_debug2(" XCreateWindow(%dx%d @ %dx%d)\n", req->width, req->height, req->x, req->y);
 				fixCoords(&req->x, &req->y, &req->width, &req->height);
+				log_debug2(" ->           (%dx%d @ %dx%d)\n", req->width, req->height, req->x, req->y);
+				break;
+			}
+
+			case X_ConfigureWindow:
+			{
+				xConfigureWindowReq* req = (xConfigureWindowReq*)buf;
+
+				INT16 dummyXY = 0;
+				CARD16 dummyWH = 0;
+				INT16 *x = &dummyXY, *y = &dummyXY;
+				CARD16 *w = &dummyWH, *h = &dummyWH;
+
+				int* ptr = (int*)(buf + sz_xConfigureWindowReq);
+				if (req->mask & 0x0001) // x
+				{
+					x = (INT16*)ptr;
+					ptr++;
+				}
+				if (req->mask & 0x0002) // y
+				{
+					y = (INT16*)ptr;
+					ptr++;
+				}
+				if (req->mask & 0x0004) // width
+				{
+					w = (CARD16*)ptr;
+					ptr++;
+				}
+				if (req->mask & 0x0008) // height
+				{
+					h = (CARD16*)ptr;
+					ptr++;
+				}
+
+				log_debug2(" XConfigureWindow(%dx%d @ %dx%d)\n", *w, *h, *x, *y);
+				fixCoords(x, y, w, h);
+				log_debug2(" ->              (%dx%d @ %dx%d)\n", *w, *h, *x, *y);
 				break;
 			}
 
@@ -524,10 +612,119 @@ static void* x11connThreadReadProc(void* dataPtr)
 			// (which can encompass multiple physical monitors).
 			case X_GetGeometry:
 			{
-				data->requests[sequenceNumber] = req->reqType;
+				data->notes[sequenceNumber] = Note_X_GetGeometry;
+				break;
+			}
+
+			case X_InternAtom:
+			{
+				xInternAtomReq* req = (xInternAtomReq*)buf;
+				const char* name = (const char*)(buf + sz_xInternAtomReq);
+				log_debug2(" XInternAtom: %.*s\n", req->nbytes, name);
+				data->notes[sequenceNumber] = Note_X_InternAtom_Other;
+				break;
+			}
+
+			case X_ChangeProperty:
+			{
+				xChangePropertyReq* req = (xChangePropertyReq*)buf;
+				log_debug2(" XChangeProperty: property=%d type=%d format=%d)\n", req->property, req->type, req->format);
+				if (req->type == XA_WM_SIZE_HINTS)
+				{
+					XSizeHints* data = (XSizeHints*)(buf + sz_xChangePropertyReq);
+					fixCoords((INT16*)&data->x, (INT16*)&data->y, (CARD16*)&data->width, (CARD16*)&data->height);
+					fixSize((CARD16*)&data->max_width, (CARD16*)&data->max_height);
+					fixSize((CARD16*)&data->base_width, (CARD16*)&data->base_height);
+				}
+				break;
+			}
+
+			case X_QueryExtension:
+			{
+				xQueryExtensionReq* req = (xQueryExtensionReq*)buf;
+				const char* name = (const char*)(buf + sz_xQueryExtensionReq);
+				log_debug2(" XQueryExtension(%.*s)\n", req->nbytes, name);
+
+				if (!strmemcmp("XFree86-VidModeExtension", name, req->nbytes))
+					data->notes[sequenceNumber] = Note_X_QueryExtension_XFree86_VidModeExtension;
+				else
+				if (!strmemcmp("RANDR", name, req->nbytes))
+					data->notes[sequenceNumber] = Note_X_QueryExtension_RANDR;
+				else
+				if (!strmemcmp("XINERAMA", name, req->nbytes))
+					data->notes[sequenceNumber] = Note_X_QueryExtension_Xinerama;
+				else
+				if (!strmemcmp("NV-GLX", name, req->nbytes))
+					data->notes[sequenceNumber] = Note_X_QueryExtension_NV_GLX;
+				else
+					data->notes[sequenceNumber] = Note_X_QueryExtension_Other;
+			}
+
+			case 0:
+				break;
+
+			default:
+			{
+				if (req->reqType == data->opcode_XFree86_VidModeExtension)
+				{
+					xXF86VidModeGetModeLineReq* req = (xXF86VidModeGetModeLineReq*)buf;
+					log_debug2(" XFree86_VidModeExtension - %d\n", req->xf86vidmodeReqType);
+					switch (req->xf86vidmodeReqType)
+					{
+						case X_XF86VidModeGetModeLine:
+							data->notes[sequenceNumber] = Note_X_XF86VidModeGetModeLine;
+							break;
+						case X_XF86VidModeGetAllModeLines:
+							data->notes[sequenceNumber] = Note_X_XF86VidModeGetAllModeLines;
+							break;
+					}
+				}
+				else
+				if (req->reqType == data->opcode_RANDR)
+				{
+					log_debug2(" RANDR - %d\n", req->data);
+					switch (req->data)
+					{
+						case X_RRGetScreenInfo:
+							data->notes[sequenceNumber] = Note_X_RRGetScreenInfo;
+							break;
+						case X_RRGetScreenResources:
+							data->notes[sequenceNumber] = Note_X_RRGetScreenResources;
+							break;
+						case X_RRGetCrtcInfo:
+							data->notes[sequenceNumber] = Note_X_RRGetCrtcInfo;
+							break;
+					}
+				}
+				else
+				if (req->reqType == data->opcode_Xinerama)
+				{
+					log_debug2(" Xinerama - %d\n", req->data);
+					switch (req->data)
+					{
+						case X_XineramaQueryScreens:
+							data->notes[sequenceNumber] = Note_X_XineramaQueryScreens;
+							break;
+					}
+				}
+				else
+				if (req->reqType == data->opcode_NV_GLX)
+				{
+#if 0
+					char fn[256];
+					sprintf(fn, "/tmp/mst4khack-NV-%d-req", sequenceNumber);
+					FILE* f = fopen(fn, "wb");
+					fwrite(buf, 1, requestLength, f);
+					fclose(f);
+#endif
+					data->notes[sequenceNumber] = Note_NV_GLX;
+				}
 				break;
 			}
 		}
+
+		if (config.debug >= 2 && memmem(buf, requestLength, &actualX, 2) && memmem(buf, requestLength, &actualY, 2))
+			log_debug2("   Found actualW/H in input! ----------------------------------------------------------------------------------------------\n");
 
 		if (!sendAll(data->server, buf, requestLength)) goto done;
 	}
@@ -563,20 +760,20 @@ static void* x11connThreadWriteProc(void* dataPtr)
 		size_t ofs = sz_xReply;
 		const xReply* reply = (xReply*)buf;
 
-		if (reply->generic.type == X_Reply)
+		if (reply->generic.type == X_Reply || reply->generic.type == GenericEvent)
 		{
 			size_t dataLength = reply->generic.length * 4;
 			bufSize(&buf, &bufLen, ofs + dataLength);
 			if (!recvAll(data->server, buf+ofs, dataLength)) goto done;
 			ofs += dataLength;
 		}
-		log_debug2(" Response: %d sequenceNumber=%d\n", reply->generic.type, reply->generic.sequenceNumber);
+		log_debug2(" [%d]Response: %d sequenceNumber=%d length=%d\n", data->index, reply->generic.type, reply->generic.sequenceNumber, ofs);
 
 		if (reply->generic.type == X_Reply)
 		{
-			switch (data->requests[reply->generic.sequenceNumber])
+			switch (data->notes[reply->generic.sequenceNumber])
 			{
-				case X_GetGeometry:
+				case Note_X_GetGeometry:
 				{
 					xGetGeometryReply* reply = (xGetGeometryReply*)buf;
 					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
@@ -584,8 +781,156 @@ static void* x11connThreadWriteProc(void* dataPtr)
 					log_debug2("  ->          (%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
 					break;
 				}
+
+				case Note_X_InternAtom_Other:
+				{
+					xInternAtomReply* reply = (xInternAtomReply*)buf;
+					log_debug2("  X_InternAtom: atom=%d\n", reply->atom);
+					break;
+				}
+
+				case Note_X_QueryExtension_XFree86_VidModeExtension:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
+					log_debug2("  X_QueryExtension (XFree86-VidModeExtension): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_XFree86_VidModeExtension = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_RANDR:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
+					log_debug2("  X_QueryExtension (RANDR): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_RANDR = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_Xinerama:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
+					log_debug2("  X_QueryExtension (XINERAMA): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_Xinerama = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_NV_GLX:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
+					log_debug2("  X_QueryExtension (NV-GLX): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_NV_GLX = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_Other:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
+					log_debug2("  X_QueryExtension: present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					break;
+				}
+
+				case Note_X_XF86VidModeGetModeLine:
+				{
+					xXF86VidModeGetModeLineReply* reply = (xXF86VidModeGetModeLineReply*)buf;
+					log_debug2("  X_XF86VidModeGetModeLine(%d x %d)\n", reply->hdisplay, reply->vdisplay);
+					fixSize(&reply->hdisplay, &reply->vdisplay);
+					log_debug2("  ->                      (%d x %d)\n", reply->hdisplay, reply->vdisplay);
+					break;
+				}
+
+				case Note_X_XF86VidModeGetAllModeLines:
+				{
+					xXF86VidModeGetAllModeLinesReply* reply = (xXF86VidModeGetAllModeLinesReply*)buf;
+					xXF86VidModeModeInfo* modeInfos = (xXF86VidModeModeInfo*)(buf + sz_xXF86VidModeGetAllModeLinesReply);
+					for (size_t i=0; i<reply->modecount; i++)
+					{
+						xXF86VidModeModeInfo* modeInfo = modeInfos + i;
+						log_debug2("  X_XF86VidModeGetAllModeLines[%d] = %d x %d\n", i, modeInfo->hdisplay, modeInfo->vdisplay);
+						fixSize(&modeInfo->hdisplay, &modeInfo->vdisplay);
+						log_debug2("  ->                                %d x %d\n",    modeInfo->hdisplay, modeInfo->vdisplay);
+					}
+					break;
+				}
+
+				case Note_X_RRGetScreenInfo:
+				{
+					xRRGetScreenInfoReply* reply = (xRRGetScreenInfoReply*)buf;
+					xScreenSizes* sizes = (xScreenSizes*)(buf+sz_xRRGetScreenInfoReply);
+					for (size_t i=0; i<reply->nSizes; i++)
+					{
+						xScreenSizes* size = sizes+i;
+						log_debug2("  X_RRGetScreenInfo[%d] = %d x %d\n", i, size->widthInPixels, size->heightInPixels);
+						fixSize(&size->widthInPixels, &size->heightInPixels);
+						log_debug2("  ->                      %d x %d\n",    size->widthInPixels, size->heightInPixels);
+					}
+					break;
+				}
+
+				case Note_X_RRGetScreenResources:
+				{
+					xRRGetScreenResourcesReply* reply = (xRRGetScreenResourcesReply*)buf;
+					void* ptr = buf+sz_xRRGetScreenResourcesReply;
+					ptr += reply->nCrtcs * sizeof(CARD32);
+					ptr += reply->nOutputs * sizeof(CARD32);
+					for (size_t i=0; i<reply->nModes; i++)
+					{
+						xRRModeInfo* modeInfo = (xRRModeInfo*)ptr;
+						log_debug2("  X_RRGetScreenResources[%d] = %d x %d\n", i, modeInfo->width, modeInfo->height);
+						fixSize(&modeInfo->width, &modeInfo->height);
+						log_debug2("  ->                           %d x %d\n",    modeInfo->width, modeInfo->height);
+						ptr += sz_xRRModeInfo;
+					}
+					break;
+				}
+
+				case Note_X_RRGetCrtcInfo:
+				{
+					xRRGetCrtcInfoReply* reply = (xRRGetCrtcInfoReply*)buf;
+					log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
+					fixCoords(&reply->x, &reply->y, &reply->width, &reply->height);
+					log_debug2("  ->                %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
+					break;
+				}
+
+				case Note_X_XineramaQueryScreens:
+				{
+					xXineramaQueryScreensReply* reply = (xXineramaQueryScreensReply*)buf;
+					xXineramaScreenInfo* screens = (xXineramaScreenInfo*)(buf+sz_XineramaQueryScreensReply);
+					for (size_t i=0; i<reply->number; i++)
+					{
+						xXineramaScreenInfo* screen = screens+i;
+						log_debug2("  X_XineramaQueryScreens[%d] = %dx%d @ %dx%d\n", i, screen->width, screen->height, screen->x_org, screen->y_org);
+						fixCoords(&screen->x_org, &screen->y_org, &screen->width, &screen->height);
+						log_debug2("  ->                           %dx%d @ %dx%d\n",    screen->width, screen->height, screen->x_org, screen->y_org);
+					}
+					break;
+				}
+
+				case Note_NV_GLX:
+				{
+#if 0
+					char fn[256];
+					static int counter = 0;
+					sprintf(fn, "/tmp/mst4khack-NV-%d-rsp-%d", reply->generic.sequenceNumber, counter++);
+					FILE* f = fopen(fn, "wb");
+					fwrite(buf, 1, ofs, f);
+					fclose(f);
+#endif
+					break;
+				}
 			}
 		}
+
+		if (config.debug >= 2 && memmem(buf, ofs, &actualX, 2) && memmem(buf, ofs, &actualY, 2))
+			log_debug2("   Found actualW/H in output! ----------------------------------------------------------------------------------------------\n");
 
 		if (!sendAll(data->client, buf, ofs)) goto done;
 	}
@@ -624,6 +969,8 @@ int connect(int socket, const struct sockaddr *address,
 					socketpair(AF_UNIX, SOCK_STREAM, 0, pair);
 
 					X11ConnData* data = calloc(1, sizeof(X11ConnData));
+					static int index = 0;
+					data->index = index++;
 					data->server = dup(socket);
 					data->client = pair[0];
 					dup2(pair[1], socket);

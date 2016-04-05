@@ -44,15 +44,6 @@ static void log_error(const char *fmt, ...)
 #define log_debug(...) do { if (config.debug >= 1) log_error(__VA_ARGS__); } while(0)
 #define log_debug2(...) do { if (config.debug >= 2) log_error(__VA_ARGS__); } while(0)
 
-static const int actualX = 1920;
-static const int actualY = 2160;
-
-/* static const int actualX = 1920*3; */
-/* static const int actualY = 1080*2; */
-
-/* static const int actualX = 1920; */
-/* static const int actualY = 1200; */
-
 // ****************************************************************************
 
 struct Config
@@ -63,6 +54,8 @@ struct Config
 	unsigned int mainH;
 	unsigned int desktopW;
 	unsigned int desktopH;
+	int actualX;
+	int actualY;
 
 	char enable;
 	char debug;
@@ -114,6 +107,8 @@ static void readConfig(const char* fn)
 		PARSE_INT(mainH)
 		PARSE_INT(desktopW)
 		PARSE_INT(desktopH)
+		PARSE_INT(actualX)
+		PARSE_INT(actualY)
 		PARSE_INT(enable)
 		PARSE_INT(debug)
 		PARSE_INT(joinMST)
@@ -723,7 +718,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 			}
 		}
 
-		if (config.debug >= 2 && memmem(buf, requestLength, &actualX, 2) && memmem(buf, requestLength, &actualY, 2))
+		if (config.debug >= 2 && memmem(buf, requestLength, &config.actualX, 2) && memmem(buf, requestLength, &config.actualY, 2))
 			log_debug2("   Found actualW/H in input! ----------------------------------------------------------------------------------------------\n");
 
 		if (!sendAll(data->server, buf, requestLength)) goto done;
@@ -929,7 +924,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			}
 		}
 
-		if (config.debug >= 2 && memmem(buf, ofs, &actualX, 2) && memmem(buf, ofs, &actualY, 2))
+		if (config.debug >= 2 && memmem(buf, ofs, &config.actualX, 2) && memmem(buf, ofs, &config.actualY, 2))
 			log_debug2("   Found actualW/H in output! ----------------------------------------------------------------------------------------------\n");
 
 		if (!sendAll(data->client, buf, ofs)) goto done;

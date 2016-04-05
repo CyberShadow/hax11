@@ -5,6 +5,7 @@ Attempts to fix game and full-screen application issues on Linux, such as:
 - starting on the wrong monitor
 - spanning too many monitors
 - spanning one half of a 4K MST monitor
+- refusing to allow selecting a desired resolution
 
 ## Building
 Build the library:
@@ -29,7 +30,7 @@ For every application using the affected API, it will create an empty configurat
 under `$HOME/.config/mst4khack/profiles/`. Each file corresponds to one program, and will be named
 after the program executable's absolute path, but with forward slashes `/` substituted with backslashes `\`.
 
-Additionally, a `default` configuration file will be loaded before the program's.
+Additionally, a `default` configuration file (in the same directory as above) will be loaded before the program's.
 
 The syntax is one `Name=Value` pair per line.
 
@@ -99,31 +100,35 @@ HyperRogue                      | Works (`MoveWindows` + `ResizeWindows`, then s
 Intrusion 2                     | Works (not needed)
 Jazzpunk                        | Works (`MoveWindows`)
 Lugaru HD                       | Works (`ResizeWindows`, then set the resolution in `~/.lugaru/Data/config.txt`)
-Lume                            | TODO
-The Magic Circle                |
-Multiwinia                      |
-Osmos                           |
-Papers, Please                  |
-Perfection.                     |
-Quest of Dungeons               |
-Risk of Rain                    |
-Satazius                        |
-Sigils of Elohim                |
-Snuggle Truck                   |
-Shatter                         |
-Starbound                       |
-Sunless Sea                     |
-Super Hexagon                   |
-Superfrog HD                    |
-Teleglitch: DME                 |
-Teslagrad                       |
-Tiki Man                        |
-TIS-100                         |
-Terraria                        |
-Uplink                          |
-Voxatron                        |
-VVVVVV                          |
-World of Goo                    |
+Lume                            | Works (`ResizeWindows`, then `Ctrl+F` to exit full screen, drag to correct monitor, `Ctrl+F` to enter full screen)
+The Magic Circle                | Works (`MoveWindows`)
+Multiwinia                      | Crashes after the splash screen on my machine
+Osmos                           | Works (not needed)
+Outlast                         | Works (`ResizeWindows`, then change the resolution)
+Papers, Please                  | Works (not needed)
+Perfection.                     | TODO - Queries resolution via proprietary NVIDIA protocol extension
+Psychonauts                     | Works (`MoveWindows` + `ResizeWindows`, then set the resolution on the first line of `$XDG_DATA_HOME/Psychonauts/DisplaySettings.ini`)
+Quest of Dungeons               | Works (`ResizeWindows`)
+Risk of Rain                    | Works (not needed)
+Satazius                        | Works (not needed)
+Shatter                         | Works (`ResizeWindows`)
+Sigils of Elohim                | Doesn't seem to have a full-screen mode. Works otherwise
+Snuggle Truck                   | Works (Unity - `MoveWindows`)
+Soul Axiom                      | Works (Unity - `MoveWindows`)
+Starbound                       | Works (`MoveWindows` + `ResizeWindows`)
+Sunless Sea                     | Works (`MoveWindows` + `ResizeWindows` + `ResizeAll`, then set the resolution to 1920x1080)
+Super Hexagon                   | TODO - Wrong screen
+Superfrog HD                    | TODO - Wrong scaling
+Teleglitch: DME                 | Works (not needed)
+Terraria                        | Works (not needed)
+Teslagrad                       | Works (Unity - `MoveWindows`)
+They Bleed Pixels               | Works (`ResizeWindows`)
+Tiki Man                        | Works (Unity - `MoveWindows`)
+TIS-100                         | Works (`MoveWindows`)
+Uplink                          | Works (`MoveWindows` + `ResizeWindows` + `ResizeAll`)
+Voxatron                        | Works (`ResizeWindows`), though the KDE panel remains on top for some reason.
+VVVVVV                          | Works (not needed)
+World of Goo                    | Works (`MoveWindows` + `ResizeWindows`, then copy `.../World of Goo/properties/config.txt` to `~/.WorldOfGoo/config.txt` and set `screen_width`/`screen_height`)
 
 ## License
 MIT

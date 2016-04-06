@@ -213,6 +213,29 @@ static void fixCoords(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 	}
 }
 
+static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
+{
+	if (*width == 1920 && *height == 2160) // Is 4K MST panel?
+	{
+		if (config.joinMST)
+		{
+			if (*x == config.mainX) // Left panel
+			{
+				*width = 1920 * 2; // resize
+				//*height = 2160;
+			}
+			else
+			if (*x == config.mainX + 1920) // Right panel
+				*x = *y = *width = *height = 0; // disable
+		}
+	}
+	else
+	{
+		if (config.maskOtherMonitors)
+			*x = *y = *width = *height = 0; // disable
+	}
+}
+
 #include <sys/socket.h>
 
 static char sendAll(int fd, const void* buf, size_t length)
@@ -890,7 +913,17 @@ static void* x11connThreadWriteProc(void* dataPtr)
 				{
 					xRRGetCrtcInfoReply* reply = (xRRGetCrtcInfoReply*)buf;
 					log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
-					fixCoords(&reply->x, &reply->y, &reply->width, &reply->height);
+					if (reply->mode != None)
+					{
+						fixMonitor(&reply->x, &reply->y, &reply->width, &reply->height);
+						if (!reply->width || !reply->height)
+						{
+							reply->x = reply->y = reply->width = reply->height = 0;
+							reply->mode = None;
+							reply->rotation = reply->rotations = RR_Rotate_0;
+							reply->nOutput = reply->nPossibleOutput = 0;
+						}
+					}
 					log_debug2("  ->                %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
 					break;
 				}

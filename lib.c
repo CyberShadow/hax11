@@ -243,7 +243,7 @@ static char sendAll(int fd, const void* buf, size_t length)
 	int remaining = length;
 	while (remaining)
 	{
-		int len = send(fd, buf, remaining, 0);
+		int len = send(fd, buf, remaining, MSG_NOSIGNAL);
 		if (len <= 0)
 			return 0;
 		buf += len;

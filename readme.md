@@ -117,7 +117,7 @@ Snuggle Truck                   | Works (Unity - `MoveWindows`)
 Soul Axiom                      | Works (Unity - `MoveWindows`)
 Starbound                       | Works (`MoveWindows` + `ResizeWindows`)
 Sunless Sea                     | Works (`MoveWindows` + `ResizeWindows` + `ResizeAll`, then set the resolution to 1920x1080)
-Super Hexagon                   | TODO - Wrong screen
+Super Hexagon                   | Works (`MoveWindows` + `ResizeWindows`)
 Superfrog HD                    | TODO - Wrong scaling
 Teleglitch: DME                 | Works (not needed)
 Terraria                        | Works (not needed)

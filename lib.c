@@ -293,7 +293,7 @@ static const char* requestNames[256] =
 	"GetAtomName",
 	"ChangeProperty",
 	NULL,
-	NULL, // 20
+	"GetProperty", // 20
 	NULL,
 	NULL,
 	NULL,
@@ -595,9 +595,10 @@ static void* x11connThreadReadProc(void* dataPtr)
 				xConfigureWindowReq* req = (xConfigureWindowReq*)buf;
 
 				INT16 dummyXY = 0;
-				CARD16 dummyWH = 0;
+				CARD16 dummyW = config.mainW;
+				CARD16 dummyH = config.mainH;
 				INT16 *x = &dummyXY, *y = &dummyXY;
-				CARD16 *w = &dummyWH, *h = &dummyWH;
+				CARD16 *w = &dummyW, *h = &dummyH;
 
 				int* ptr = (int*)(buf + sz_xConfigureWindowReq);
 				if (req->mask & 0x0001) // x

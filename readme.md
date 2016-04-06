@@ -65,10 +65,10 @@ Game                            | Status
 ------------------------------- | -----------------------------------------------
 10,000,000                      | Works (`MoveWindows` + `ResizeWindows`)
 140                             | Works (Unity - `MoveWindows`)
-3089                            |
+3089                            | Java. Resolution selector is completely broken, throws NullPointerException
 Adventures of Shuggy            | Works (not needed)
 And Yet It Moves                | Works (`MoveWindows` + `ResizeWindows`, then set `<Resolution>`...`</Resolution>` in `~/.Broken Rules/And Yet It Moves/common/commonConfig.xml`)
-Anodyne                         | ? (needs Adobe Air)
+Anodyne                         | Adobe Air version doesn't start (exits with code 5); Standalone (.swf) version can't get past the calibration screne
 Antichamber                     | Works (not needed)
 Aquaria (Steam)                 | Works (`ResizeWindows`, then set `resx` and `resy` in `~/.Aquaria/preferences/usersettings.xml`)
 Aquaria (tarball)               | Works (as above)
@@ -88,7 +88,7 @@ Dust: An Elysian Tail           | Works (`ResizeWindows`, then change the resolu
 Dynamite Jack                   | Works (`MoveWindows` + `ResizeWindows`, then change the resolution)
 Escape Goat                     | Works (`ResizeWindows` + `ResizeAll`)
 Eversion                        | Works (not needed)
-Faerie Solitaire                | Does not actually have a Linux port on Steam
+Faerie Solitaire [Beta]         | Works (`ResizeWindows`)
 Garry's Mod                     | Works (Source - `ResizeWindows`, then change the resolution)
 Gigantic Army                   | Works (not needed)
 Gone Home                       | Doesn't start at all on my machine

@@ -573,6 +573,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 		}
 		log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
 		bufSize(&buf, &bufLen, requestLength);
+		req = (xReq*)buf; // in case bufSize moved buf
 
 		if (!recvAll(data->client, buf+ofs, requestLength - ofs)) goto done;
 
@@ -782,6 +783,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 		{
 			size_t dataLength = reply->generic.length * 4;
 			bufSize(&buf, &bufLen, ofs + dataLength);
+			reply = (xReply*)buf; // in case bufSize moved buf
 			if (!recvAll(data->server, buf+ofs, dataLength)) goto done;
 			ofs += dataLength;
 		}

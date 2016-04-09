@@ -1,7 +1,4 @@
-all: client lib
-
-client: client.c Makefile
-	gcc -std=c99 -lxcb -lxcb-randr -lxcb-xinerama -lxcb-xtest -lxcb-shape -lxcb-util -g -o client client.c
+all: lib
 
 lib: lib32/mst4khack.so lib64/mst4khack.so
 

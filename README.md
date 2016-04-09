@@ -69,15 +69,15 @@ $ LD_PRELOAD= xrandr
 
 You can install this library system-wide, so that it is loaded into all applications on start-up.
 
-**Warning**! This project may or may not be compatible with your system.
-Before installation, make sure you're capable to uninstalling this library if X, your desktop environment, etc. refuses to start.
+**Warning**! This project may or may not be compatible with your system. Installing this library system-wide *may* put your system into an unusable state.
+Before installation, make sure you're capable of uninstalling this library if X, your desktop environment, etc. refuses to start.
 
 This will install the libraries under `/usr/local/lib{32,64}`, and a script under `/etc/profile.d`:
 ```bash
 make install
 ```
 
-Log out and back in to apply the hack to all applications.
+Log out and back in (or reboot) to apply the hack to all applications.
 
 ## Status
 

@@ -19,7 +19,7 @@ The Makefile assumes you have a 64-bit system. You will need gcc-multilib to bui
 
 ## Usage
 
-To try this library, run the following in a shell:
+To try this library, build this library as above, then in the same directory, run the following in a shell:
 
 ```
 export LD_PRELOAD=`pwd`/\$LIB/hax11.so

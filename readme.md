@@ -1,10 +1,11 @@
 # mst4khack
-Hackbrary to hook X11 API calls.
+Hackbrary to hook X11 protocol calls.
 
 Attempts to fix game and full-screen application issues on Linux, such as:
 - starting on the wrong monitor
 - spanning too many monitors
 - spanning one half of a 4K MST monitor
+- refusing to allow selecting a desired resolution
 
 ## Building
 Build the library:
@@ -29,7 +30,7 @@ For every application using the affected API, it will create an empty configurat
 under `$HOME/.config/mst4khack/profiles/`. Each file corresponds to one program, and will be named
 after the program executable's absolute path, but with forward slashes `/` substituted with backslashes `\`.
 
-Additionally, a `default` configuration file will be loaded before the program's.
+Additionally, a `default` configuration file (in the same directory as above) will be loaded before the program's.
 
 The syntax is one `Name=Value` pair per line.
 
@@ -37,15 +38,16 @@ Supported configuration options:
 
 Name                  | Values  | Description
 --------------------- | ------- | ---------------------------------
-`MainX`/`Y`           | Number  | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
-`MainW`/`H`           | Number  | The resolution of your primary monitor (or total resolution of monitors to be used for games)
-`DesktopW`/`H`        | Number  | The resolution of your desktop (all monitors combined)
-`Debug`               | `0`/`1` | Boolean - Enable debugging output to stderr and `/tmp/mst4khack.log`
+`Enable`              | `0`/`1` | Boolean - Intercept the X11 connection (required for any other settings to have any effect)
 `JoinMST`             | `0`/`1` | Boolean - Join MST panels and present them as one monitor to the application
 `MaskOtherMonitors`   | `0`/`1` | Boolean - Whether to hide the presence of other monitors from the application
 `ResizeWindows`       | `0`/`1` | Boolean - Whether to forcibly change the size of windows that span too many monitors
 `ResizeAll`           | `0`/`1` | Boolean - Resize (stretch) all windows, not just those matching the size of one MST panel
 `MoveWindows`         | `0`/`1` | Boolean - Whether to forcibly move windows created at (0,0) to the primary monitor
+`MainX`/`Y`           | Number  | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
+`MainW`/`H`           | Number  | The resolution of your primary monitor (or total resolution of monitors to be used for games)
+`DesktopW`/`H`        | Number  | The resolution of your desktop (all monitors combined)
+`Debug`               | Number  | Log level - Non-zero enables debugging output to stderr and `/tmp/mst4khack.log`
 
 A sensible configuration is to have `JoinMST=1` and the `Main*` / `Desktop*` settings in the `default` profile,
 and per-game settings in their executables' profiles.
@@ -62,63 +64,71 @@ $ LD_PRELOAD= xrandr
 Game                            | Status
 ------------------------------- | -----------------------------------------------
 10,000,000                      | Works (`MoveWindows` + `ResizeWindows`)
-140                             | Works (`MoveWindows`)
-3089                            | TODO - Detected max. resolution is one panel despite `ResizeWindows` [Java]
-Adventures of Shuggy            | Works
-And Yet It Moves                | Entire desktop - SDL talks to X directly
-Anodyne                         | Needs Adobe Air
-Antichamber                     | Works
-Aquaria (Steam)                 | TODO - Half-screen
-Aquaria (tarball)               | TODO - Wrong monitor
-Avadon: The Black Fortress      | TODO - Defaults to 1024x768; even with `MoveWindows` and after editing `~/.local/share/Avadon/Avadon.ini`, still uses up both screens
-Bad Hotel                       | No 4k option; screen is cut in the ~middle (looks like game bug)
+140                             | Works (Unity - `MoveWindows`)
+3089                            | Java. Resolution selector is completely broken, throws NullPointerException
+Adventures of Shuggy            | Works (not needed)
+And Yet It Moves                | Works (`MoveWindows` + `ResizeWindows`, then set `<Resolution>`...`</Resolution>` in `~/.Broken Rules/And Yet It Moves/common/commonConfig.xml`)
+Anodyne                         | Adobe Air version doesn't start (exits with code 5); Standalone (.swf) version can't get past the calibration screne
+Antichamber                     | Works (not needed)
+Aquaria (Steam)                 | Works (`ResizeWindows`, then set `resx` and `resy` in `~/.Aquaria/preferences/usersettings.xml`)
+Aquaria (tarball)               | Works (as above)
+Avadon: The Black Fortress      | Works (`MoveWindows` + `ResizeWindows`)
+Bad Hotel                       | Works (`ResizeWindows` + `ResizeAll`)
+The Binding of Isaac: Rebirth   | Works (not needed)
 BIT.TRIP RUNNER                 | Does not actually have a Linux port on Steam
-Blueberry Garden                | TODO - Half-screen, resolution menu detects half screen
-Bridge Constructor Playground   | Works (`MoveWindows`)
-The Binding of Isaac: Rebirth   | Works
-Card City Nights                | Works (`MoveWindows`)
-Crimsonland                     | TODO - Half-screen
-Darwinia                        | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
-DEFCON                          | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
-Dota 2                          | OpenGL error (breakage looks unrelated)
-Dungeons of Dredmor             | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`, weird mouse bugs
-Dust: An Elysian Tail           | TODO - Detected max. resolution is one panel despite `ResizeWindows`
-Dynamite Jack                   | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
-Escape Goat                     | TODO - Odd AR (3:1?)
-Eversion                        | Works
-Garry's Mod                     | OpenGL error (breakage looks unrelated)
-Gigantic Army                   | Works
-Half-Life 2: Deathmatch         | OpenGL error (breakage looks unrelated)
-Hexcells                        | Works (`MoveWindows`)
-HyperRogue                      | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
-Intrusion 2                     | Works
-Jazzpunk                        | Works (`MoveWindows`, set game resolution to 4K)
-Lugaru HD                       | TODO - Doesn't want to go full screen
-Lume                            | TODO - Half-screen
+Blueberry Garden                | Works (`ResizeWindows`)
+Bridge Constructor Playground   | Works (Unity - `MoveWindows`)
+Card City Nights                | Works (Unity - `MoveWindows`)
+Crimsonland                     | Works (`ResizeWindows`, then change the resolution)
+Darwinia                        | Works (`MoveWindows` + `ResizeWindows`, change the resolution to fix AR)
+DEFCON                          | Works (`MoveWindows` + `ResizeWindows`, then change the resolution)
+Dota 2                          | Works (`ResizeWindows` + "Use my monitor's current resolution")
+Dungeons of Dredmor             | Works (`MoveWindows` + `ResizeWindows`, set resolution in the launcher)
+Dust: An Elysian Tail           | Works (`ResizeWindows`, then change the resolution)
+Dynamite Jack                   | Works (`MoveWindows` + `ResizeWindows`, then change the resolution)
+Escape Goat                     | Works (`ResizeWindows` + `ResizeAll`)
+Eversion                        | Works (not needed)
+Faerie Solitaire [Beta]         | Works (`ResizeWindows`)
+Garry's Mod                     | Works (Source - `ResizeWindows`, then change the resolution)
+Gigantic Army                   | Works (not needed)
+Gone Home                       | Doesn't start at all on my machine
+Guacamelee! Gold Edition        | Works (`ResizeWindows`, then change the resolution)
+Half-Life 2: Deathmatch         | Works (Source - `ResizeWindows`, then change the resolution)
+Heavy Bullets                   | Works (not needed)
+Hexcells                        | Works (Unity - `MoveWindows`)
+HyperRogue                      | Works (`MoveWindows` + `ResizeWindows`, then set the resolution on the first line of `~/.hyperrogue.ini`)
+Intrusion 2                     | Works (not needed)
+Jazzpunk                        | Works (`MoveWindows`)
+Lugaru HD                       | Works (`ResizeWindows`, then set the resolution in `~/.lugaru/Data/config.txt`)
+Lume                            | Works (`ResizeWindows`, then `Ctrl+F` to exit full screen, drag to correct monitor, `Ctrl+F` to enter full screen)
 The Magic Circle                | Works (`MoveWindows`)
-Multiwinia                      | Doesn't start
-Osmos                           | Works
-Papers, Please                  | Works
-Perfection.                     | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
-Quest of Dungeons               | TODO - Doesn't want to go full screen
-Risk of Rain                    | Works
-Satazius                        | Works
-Sigils of Elohim                | No full screen?
-Snuggle Truck                   | Works
-Shatter                         | TODO - Doesn't want to go full screen
-Starbound                       | TODO - Starts centered on entire desktop despite `MoveWindows` and setting 4K resolution in `~/.local/share/Steam/steamapps/common/Starbound/giraffe_storage/starbound.config`
-Sunless Sea                     | Works (set game resolution to 1080p, `MoveWindows` + `ResizeWindows` + `ResizeAll`)
-Super Hexagon                   | TODO - Wrong screen
-Superfrog HD                    | FUBAR
-Teleglitch: DME                 | Works
-Teslagrad                       | Works (`MoveWindows`)
-Tiki Man                        | Works (`MoveWindows`)
+Multiwinia                      | Crashes after the splash screen on my machine
+Osmos                           | Works (not needed)
+Outlast                         | Works (`ResizeWindows`, then change the resolution)
+Papers, Please                  | Works (not needed)
+Perfection.                     | TODO - Queries resolution via proprietary NVIDIA protocol extension
+Psychonauts                     | Works (`MoveWindows` + `ResizeWindows`, then set the resolution on the first line of `$XDG_DATA_HOME/Psychonauts/DisplaySettings.ini`)
+Quest of Dungeons               | Works (`ResizeWindows`)
+Risk of Rain                    | Works (not needed)
+Satazius                        | Works (not needed)
+Shatter                         | Works (`ResizeWindows`)
+Sigils of Elohim                | Doesn't seem to have a full-screen mode. Works otherwise
+Snuggle Truck                   | Works (Unity - `MoveWindows`)
+Soul Axiom                      | Works (Unity - `MoveWindows`)
+Starbound                       | Works (`MoveWindows` + `ResizeWindows`)
+Sunless Sea                     | Works (`MoveWindows` + `ResizeWindows` + `ResizeAll`, then set the resolution to 1920x1080)
+Super Hexagon                   | Works (`MoveWindows` + `ResizeWindows`)
+Superfrog HD                    | TODO - Wrong scaling
+Teleglitch: DME                 | Works (not needed)
+Terraria                        | Works (not needed)
+Teslagrad                       | Works (Unity - `MoveWindows`)
+They Bleed Pixels               | Works (`ResizeWindows`)
+Tiki Man                        | Works (Unity - `MoveWindows`)
 TIS-100                         | Works (`MoveWindows`)
-Terraria                        | Works
-Uplink                          | TODO - Detected max. resolution is desktop-size despite `ResizeWindows`
-Voxatron                        | TODO - Half-screen
-VVVVVV                          | Works
-World of Goo                    | TODO - Entire desktop. Doesn't use any hooked APIs at all
+Uplink                          | Works (`MoveWindows` + `ResizeWindows` + `ResizeAll`)
+Voxatron                        | Works (`ResizeWindows`), though the KDE panel remains on top for some reason.
+VVVVVV                          | Works (not needed)
+World of Goo                    | Works (`MoveWindows` + `ResizeWindows`, then copy `.../World of Goo/properties/config.txt` to `~/.WorldOfGoo/config.txt` and set `screen_width`/`screen_height`)
 
 ## License
 MIT

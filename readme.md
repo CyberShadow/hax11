@@ -1,4 +1,5 @@
 # mst4khack
+
 Hackbrary to hook X11 protocol calls.
 
 Attempts to fix game and full-screen application issues on Linux, such as:
@@ -8,6 +9,7 @@ Attempts to fix game and full-screen application issues on Linux, such as:
 - refusing to allow selecting a desired resolution
 
 ## Building
+
 Build the library:
 ```bash
 make
@@ -15,15 +17,18 @@ make
 
 The Makefile assumes you have a 64-bit system. You will need gcc-multilib to build the 32-bit version.
 
-## Installation
-This will install the libraries under `/usr/local/lib{32,64}`, and a script under `/etc/profile.d`:
-```bash
-make install
+## Usage
+
+To try this library, run the following in a shell:
+
+```
+export LD_PRELOAD=`pwd`/\$LIB/mst4khack.so
 ```
 
-Log out/in or source the script to apply the hack.
+Then, from the same shell session, start the desired game or application.
 
-## Usage
+## Configuration
+
 By default, this library will not do anything.
 
 For every application using the affected API, it will create an empty configuration file
@@ -60,7 +65,28 @@ To temporarily disable mst4khack, unset `LD_PRELOAD` before running a program, e
 $ LD_PRELOAD= xrandr
 ```
 
+## Installation
+
+You can install this library system-wide, so that it is loaded into all applications on start-up.
+
+**Warning**! This project may or may not be compatible with your system.
+Before installation, make sure you're capable to uninstalling this library if X, your desktop environment, etc. refuses to start.
+
+This will install the libraries under `/usr/local/lib{32,64}`, and a script under `/etc/profile.d`:
+```bash
+make install
+```
+
+Log out and back in to apply the hack to all applications.
+
 ## Status
+
+The following table represents the results of testing this library on the author's machine,
+consisting of a 1920x1200 monitor at (0,0), and a 4K monitor in MST mode (thus presenting itself as two 1920x2160 panels) at (1920,0).
+
+The desired result (and solution listed to achieve said result) is to launch the game in full-screen on the 4K monitor,
+at 4K resolution if the game supports it.
+
 Game                            | Status
 ------------------------------- | -----------------------------------------------
 10,000,000                      | Works (`MoveWindows` + `ResizeWindows`)
@@ -131,4 +157,11 @@ VVVVVV                          | Works (not needed)
 World of Goo                    | Works (`MoveWindows` + `ResizeWindows`, then copy `.../World of Goo/properties/config.txt` to `~/.WorldOfGoo/config.txt` and set `screen_width`/`screen_height`)
 
 ## License
-MIT
+
+Copyright (c) 2015-2016 mst4kack authors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

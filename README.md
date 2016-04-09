@@ -1,4 +1,4 @@
-# mst4khack
+# hax11
 
 Hackbrary to hook X11 protocol calls.
 
@@ -22,7 +22,7 @@ The Makefile assumes you have a 64-bit system. You will need gcc-multilib to bui
 To try this library, run the following in a shell:
 
 ```
-export LD_PRELOAD=`pwd`/\$LIB/mst4khack.so
+export LD_PRELOAD=`pwd`/\$LIB/hax11.so
 ```
 
 Then, from the same shell session, start the desired game or application.
@@ -32,7 +32,7 @@ Then, from the same shell session, start the desired game or application.
 By default, this library will not do anything.
 
 For every application using the affected API, it will create an empty configuration file
-under `$HOME/.config/mst4khack/profiles/`. Each file corresponds to one program, and will be named
+under `$HOME/.config/hax11/profiles/`. Each file corresponds to one program, and will be named
 after the program executable's absolute path, but with forward slashes `/` substituted with backslashes `\`.
 
 Additionally, a `default` configuration file (in the same directory as above) will be loaded before the program's.
@@ -52,7 +52,7 @@ Name                  | Values  | Description
 `MainX`/`Y`           | Number  | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
 `MainW`/`H`           | Number  | The resolution of your primary monitor (or total resolution of monitors to be used for games)
 `DesktopW`/`H`        | Number  | The resolution of your desktop (all monitors combined)
-`Debug`               | Number  | Log level - Non-zero enables debugging output to stderr and `/tmp/mst4khack.log`
+`Debug`               | Number  | Log level - Non-zero enables debugging output to stderr and `/tmp/hax11.log`
 
 A sensible configuration is to have `JoinMST=1` and the `Main*` / `Desktop*` settings in the `default` profile,
 and per-game settings in their executables' profiles.
@@ -60,7 +60,7 @@ and per-game settings in their executables' profiles.
 Beware that your window manager and shell use the same APIs,
 thus having other options enabled for such programs may make other monitors unusable.
 
-To temporarily disable mst4khack, unset `LD_PRELOAD` before running a program, e.g.:
+To temporarily disable hax11, unset `LD_PRELOAD` before running a program, e.g.:
 ```
 $ LD_PRELOAD= xrandr
 ```
@@ -158,7 +158,7 @@ World of Goo                    | Works (`MoveWindows` + `ResizeWindows`, then c
 
 ## License
 
-Copyright (c) 2015-2016 mst4kack authors.
+Copyright (c) 2015-2016 hax11 authors.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

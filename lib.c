@@ -27,11 +27,11 @@ static void log_error(const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-	fprintf(stderr, "mst4khack: ");
+	fprintf(stderr, "hax11: ");
 	vfprintf(stderr, fmt, args);
 	va_end(args);
 
-	FILE* f = fopen("/tmp/mst4khack.log", "ab");
+	FILE* f = fopen("/tmp/hax11.log", "ab");
 	if (f)
 	{
 		va_start(args, fmt);
@@ -141,7 +141,7 @@ static void needConfig()
 	char buf[1024] = {0};
 	strncpy(buf, getenv("HOME"), sizeof(buf)-100);
 	strcat(buf, "/.config"	); mkdir(buf, 0700); // TODO: XDG_CONFIG_HOME
-	strcat(buf, "/mst4khack"); mkdir(buf, 0700);
+	strcat(buf, "/hax11"); mkdir(buf, 0700);
 	strcat(buf, "/profiles"	); mkdir(buf, 0700);
 	char *p = buf + strlen(buf);
 
@@ -732,7 +732,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 				{
 #if 0
 					char fn[256];
-					sprintf(fn, "/tmp/mst4khack-NV-%d-req", sequenceNumber);
+					sprintf(fn, "/tmp/hax11-NV-%d-req", sequenceNumber);
 					FILE* f = fopen(fn, "wb");
 					fwrite(buf, 1, requestLength, f);
 					fclose(f);
@@ -950,7 +950,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 #if 0
 					char fn[256];
 					static int counter = 0;
-					sprintf(fn, "/tmp/mst4khack-NV-%d-rsp-%d", reply->generic.sequenceNumber, counter++);
+					sprintf(fn, "/tmp/hax11-NV-%d-rsp-%d", reply->generic.sequenceNumber, counter++);
 					FILE* f = fopen(fn, "wb");
 					fwrite(buf, 1, ofs, f);
 					fclose(f);

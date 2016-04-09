@@ -1,6 +1,6 @@
 # hax11
 
-Hackbrary to hook X11 protocol calls.
+Hackbrary to **H**ook and **A**ugment **X11** protocol calls.
 
 Attempts to fix game and full-screen application issues on Linux, such as:
 - starting on the wrong monitor

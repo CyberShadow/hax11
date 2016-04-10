@@ -81,8 +81,8 @@ Log out and back in (or reboot) to apply the hack to all applications.
 
 ## Status
 
-The following table represents the results of testing this library on the author's machine,
-consisting of a 1920x1200 monitor at (0,0), and a 4K monitor in MST mode (thus presenting itself as two 1920x2160 panels) at (1920,0).
+The following table represents the results of testing this library on the author's machine, consisting of a 1920x1200 monitor at (0,0),
+and a 4K monitor in MST mode (thus presenting itself as two 1920x2160 panels) at (1920,0). The 4K monitor is the primary one.
 
 The desired result (and solution listed to achieve said result) is to launch the game in full-screen on the 4K monitor,
 at 4K resolution if the game supports it.

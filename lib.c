@@ -311,7 +311,7 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	NULL,
+	"QueryPointer",
 	NULL,
 	NULL, // 40
 	NULL,

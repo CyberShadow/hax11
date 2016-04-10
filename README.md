@@ -12,7 +12,7 @@ Attempts to fix game and full-screen application issues on Linux, such as:
 
 Build the library:
 ```bash
-make
+$ make
 ```
 
 The Makefile assumes you have a 64-bit system. You will need gcc-multilib to build the 32-bit version.
@@ -21,8 +21,8 @@ The Makefile assumes you have a 64-bit system. You will need gcc-multilib to bui
 
 To try this library, build this library as above, then in the same directory, run the following in a shell:
 
-```
-export LD_PRELOAD=`pwd`/\$LIB/hax11.so
+```bash
+$ export LD_PRELOAD=`pwd`/\$LIB/hax11.so
 ```
 
 Then, from the same shell session, start the desired game or application.
@@ -49,10 +49,10 @@ Name                  | Values  | Description
 `ResizeWindows`       | `0`/`1` | Boolean - Whether to forcibly change the size of windows that span too many monitors
 `ResizeAll`           | `0`/`1` | Boolean - Resize (stretch) all windows, not just those matching the size of one MST panel
 `MoveWindows`         | `0`/`1` | Boolean - Whether to forcibly move windows created at (0,0) to the primary monitor
-`MainX`/`Y`           | Number  | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
-`MainW`/`H`           | Number  | The resolution of your primary monitor (or total resolution of monitors to be used for games)
-`DesktopW`/`H`        | Number  | The resolution of your desktop (all monitors combined)
-`Debug`               | Number  | Log level - Non-zero enables debugging output to stderr and `/tmp/hax11.log`
+`MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
+`MainW`/`H`           | Integer | The resolution of your primary monitor (or total resolution of monitors to be used for games)
+`DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)
+`Debug`               | Integer | Log level - Non-zero enables debugging output to stderr and `/tmp/hax11.log`
 
 A sensible configuration is to have `JoinMST=1` and the `Main*` / `Desktop*` settings in the `default` profile,
 and per-game settings in their executables' profiles.
@@ -61,7 +61,7 @@ Beware that your window manager and shell use the same APIs,
 thus having other options enabled for such programs may make other monitors unusable.
 
 To temporarily disable hax11, unset `LD_PRELOAD` before running a program, e.g.:
-```
+```bash
 $ LD_PRELOAD= xrandr
 ```
 
@@ -74,7 +74,7 @@ Before installation, make sure you're capable of uninstalling this library if X,
 
 This will install the libraries under `/usr/local/lib{32,64}`, and a script under `/etc/profile.d`:
 ```bash
-make install
+$ make install
 ```
 
 Log out and back in (or reboot) to apply the hack to all applications.
@@ -94,7 +94,7 @@ Game                            | Status
 3089                            | Java. Resolution selector is completely broken, throws NullPointerException
 Adventures of Shuggy            | Works (not needed)
 And Yet It Moves                | Works (`MoveWindows` + `ResizeWindows`, then set `<Resolution>`...`</Resolution>` in `~/.Broken Rules/And Yet It Moves/common/commonConfig.xml`)
-Anodyne                         | Adobe Air version doesn't start (exits with code 5); Standalone (.swf) version can't get past the calibration screne
+Anodyne                         | Adobe Air version doesn't start (exits with code 5); standalone (.swf) version can't get past the calibration screen
 Antichamber                     | Works (not needed)
 Aquaria (Steam)                 | Works (`ResizeWindows`, then set `resx` and `resy` in `~/.Aquaria/preferences/usersettings.xml`)
 Aquaria (tarball)               | Works (as above)

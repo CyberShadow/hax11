@@ -34,6 +34,7 @@ static void log_error(const char *fmt, ...)
 	FILE* f = fopen("/tmp/hax11.log", "ab");
 	if (f)
 	{
+		fprintf(f, "[%d] ", getpid());
 		va_start(args, fmt);
 		vfprintf(f, fmt, args);
 		va_end(args);
@@ -508,6 +509,7 @@ typedef struct
 {
 	int index;
 	int server, client;
+	char exiting;
 	unsigned char notes[1<<16];
 	unsigned char opcode_XFree86_VidModeExtension;
 	unsigned char opcode_RANDR;
@@ -557,7 +559,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 
 	unsigned short sequenceNumber = 0;
 
-	while (1)
+	while (!data->exiting)
 	{
 		sequenceNumber++;
 
@@ -751,7 +753,9 @@ static void* x11connThreadReadProc(void* dataPtr)
 		if (!sendAll(data->server, buf, requestLength)) goto done;
 	}
 done:
-	log_debug2("Exiting read thread.\n");
+	log_debug("Exiting read thread.\n");
+	data->exiting = 1;
+	close(data->client);
 	close(data->server);
 	return NULL;
 }
@@ -777,7 +781,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 	}
 
 	bufSize(&buf, &bufLen, sz_xReply);
-	while (1)
+	while (!data->exiting)
 	{
 		if (!recvAll(data->server, buf, sz_xReply)) goto done;
 		size_t ofs = sz_xReply;
@@ -969,8 +973,10 @@ static void* x11connThreadWriteProc(void* dataPtr)
 		if (!sendAll(data->client, buf, ofs)) goto done;
 	}
 done:
-	log_debug2("Exiting write thread.\n");
+	log_debug("Exiting write thread.\n");
+	data->exiting = 1;
 	close(data->client);
+	close(data->server);
 	return NULL;
 }
 
@@ -980,6 +986,7 @@ static void* pthread = NULL;
 #include <sys/un.h>
 #include <pthread.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 
 int connect(int socket, const struct sockaddr *address,
 	socklen_t address_len)
@@ -1021,7 +1028,17 @@ int connect(int socket, const struct sockaddr *address,
 						pid_t pid = fork();
 						if (pid == 0)
 						{
-							log_debug("In child!\n");
+							log_debug("In child, forking again\n");
+							pid = getpid();
+							pid_t pid2 = fork();
+							if (pid2)
+							{
+								log_debug("Second fork is %d\n", pid2);
+								exit(0);
+							}
+							log_debug("In child, double-fork OK\n");
+							waitpid(pid, NULL, 0);
+							log_debug("Parent exited, proceeding\n");
 							struct rlimit r;
 							getrlimit(RLIMIT_NOFILE, &r);
 
@@ -1037,7 +1054,8 @@ int connect(int socket, const struct sockaddr *address,
 
 							if (pid > 0)
 							{
-								log_debug("In parent!\n");
+								log_debug("In parent! Child is %d\n", pid);
+								waitpid(pid, NULL, 0);
 								return result;
 							}
 							else
@@ -1059,14 +1077,20 @@ int connect(int socket, const struct sockaddr *address,
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
 						(& readThread, &attr, x11connThreadReadProc, data);
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
-						(&writeThread, &attr, x11connThreadWriteProc, data);
+						(&writeThread, NULL, x11connThreadWriteProc, data);
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_destroy)(&attr);
 
 					if (config.fork)
 					{
+						log_debug("Joining read thread...\n");
 						NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)( readThread, NULL);
-						NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)(writeThread, NULL);
+						// log_debug("Joining write thread...\n");
+						// NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)(writeThread, NULL);
+						log_debug("Fork is exiting.\n");
 						NEXT(pthread, "/usr/lib/libpthread.so", pthread_exit)(0);
+						log_debug("I said, fork is exiting.\n");
+						exit(0);
+						log_debug("WTF?\n");
 					}
 				}
 			}

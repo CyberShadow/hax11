@@ -1008,11 +1008,16 @@ int connect(int socket, const struct sockaddr *address,
 					dup2(pair[1], socket);
 					close(pair[1]);
 
+					pthread_attr_t attr;
+					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_init)(&attr);
+					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
+
 					pthread_t thread;
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
-						(&thread, NULL, x11connThreadReadProc, data);
+						(&thread, &attr, x11connThreadReadProc, data);
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
-						(&thread, NULL, x11connThreadWriteProc, data);
+						(&thread, &attr, x11connThreadWriteProc, data);
+					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_destroy)(&attr);
 				}
 			}
 		}

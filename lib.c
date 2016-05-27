@@ -64,6 +64,7 @@ struct Config
 	char resizeWindows;
 	char resizeAll;
 	char moveWindows;
+	char fork;
 };
 
 static struct Config config = {};
@@ -116,6 +117,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(resizeWindows)
 		PARSE_INT(resizeAll)
 		PARSE_INT(moveWindows)
+		PARSE_INT(fork)
 			log_error("Unknown option: %s\n", buf);
 	}
 	fclose(f);
@@ -749,6 +751,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 		if (!sendAll(data->server, buf, requestLength)) goto done;
 	}
 done:
+	log_debug2("Exiting read thread.\n");
 	close(data->server);
 	return NULL;
 }
@@ -966,6 +969,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 		if (!sendAll(data->client, buf, ofs)) goto done;
 	}
 done:
+	log_debug2("Exiting write thread.\n");
 	close(data->client);
 	return NULL;
 }
@@ -975,6 +979,7 @@ static void* pthread = NULL;
 
 #include <sys/un.h>
 #include <pthread.h>
+#include <sys/resource.h>
 
 int connect(int socket, const struct sockaddr *address,
 	socklen_t address_len)
@@ -997,6 +1002,7 @@ int connect(int socket, const struct sockaddr *address,
 				if (config.enable)
 				{
 					log_debug("Intercepting X connection!\n");
+
 					int pair[2];
 					socketpair(AF_UNIX, SOCK_STREAM, 0, pair);
 
@@ -1008,16 +1014,60 @@ int connect(int socket, const struct sockaddr *address,
 					dup2(pair[1], socket);
 					close(pair[1]);
 
+					if (config.fork)
+					{
+						log_debug("Forking...\n");
+
+						pid_t pid = fork();
+						if (pid == 0)
+						{
+							log_debug("In child!\n");
+							struct rlimit r;
+							getrlimit(RLIMIT_NOFILE, &r);
+
+							for (int n=3; n<(int)r.rlim_cur; n++)
+								if (n != data->server && n != data->client)
+									close(n);
+						}
+						else
+						{
+							close(data->server);
+							close(data->client);
+							free(data);
+
+							if (pid > 0)
+							{
+								log_debug("In parent!\n");
+								return result;
+							}
+							else
+							{
+								log_debug("Fork failed!\n");
+								return pid;
+							}
+						}
+					}
+
 					pthread_attr_t attr;
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_init)(&attr);
-					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
+					if (!config.fork)
+					{
+						NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
+					}
 
-					pthread_t thread;
+					pthread_t readThread, writeThread;
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
-						(&thread, &attr, x11connThreadReadProc, data);
+						(& readThread, &attr, x11connThreadReadProc, data);
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
-						(&thread, &attr, x11connThreadWriteProc, data);
+						(&writeThread, &attr, x11connThreadWriteProc, data);
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_destroy)(&attr);
+
+					if (config.fork)
+					{
+						NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)( readThread, NULL);
+						NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)(writeThread, NULL);
+						NEXT(pthread, "/usr/lib/libpthread.so", pthread_exit)(0);
+					}
 				}
 			}
 		}

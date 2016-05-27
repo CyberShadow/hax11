@@ -971,6 +971,7 @@ done:
 }
 
 static void* libc = NULL;
+static void* pthread = NULL;
 
 #include <sys/un.h>
 #include <pthread.h>
@@ -1008,8 +1009,10 @@ int connect(int socket, const struct sockaddr *address,
 					close(pair[1]);
 
 					pthread_t thread;
-					pthread_create(&thread, NULL, x11connThreadReadProc, data);
-					pthread_create(&thread, NULL, x11connThreadWriteProc, data);
+					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
+						(&thread, NULL, x11connThreadReadProc, data);
+					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
+						(&thread, NULL, x11connThreadWriteProc, data);
 				}
 			}
 		}

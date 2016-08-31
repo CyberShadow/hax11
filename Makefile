@@ -20,6 +20,6 @@ install:
 uninstall:
 	rm -f /usr/local/lib32/hax11.so
 	rm -f /usr/local/lib64/hax11.so
-	rm -f /etc/profile.d/d/hax11.sh
+	rm -f /etc/profile.d/hax11.sh
 
 .PHONY: all lib install

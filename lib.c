@@ -170,12 +170,12 @@ static void needConfig()
 					handle = dlopen(path, RTLD_LAZY);			\
 				}												\
 				if (!handle) {									\
-					log_error("4khack: Ack, dlopen failed!\n");	\
+					log_error("hax11: Ack, dlopen failed!\n");	\
 				}												\
 				pfunc = (typeof(&func))dlsym(handle, #func);	\
 			}													\
 			if (!pfunc)											\
-				log_error("4khack: Ack, dlsym failed!\n");		\
+				log_error("hax11: Ack, dlsym failed!\n");		\
 			pfunc;												\
 		})
 

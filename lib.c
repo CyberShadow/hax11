@@ -755,6 +755,8 @@ static void* x11connThreadReadProc(void* dataPtr)
 done:
 	log_debug("Exiting read thread.\n");
 	data->exiting = 1;
+	shutdown(data->client, SHUT_RDWR);
+	shutdown(data->server, SHUT_RDWR);
 	close(data->client);
 	close(data->server);
 	return NULL;
@@ -975,6 +977,8 @@ static void* x11connThreadWriteProc(void* dataPtr)
 done:
 	log_debug("Exiting write thread.\n");
 	data->exiting = 1;
+	shutdown(data->client, SHUT_RDWR);
+	shutdown(data->server, SHUT_RDWR);
 	close(data->client);
 	close(data->server);
 	return NULL;

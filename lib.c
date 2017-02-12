@@ -336,7 +336,7 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	NULL, // 60
+	"FreeGC", // 60
 	NULL,
 	NULL,
 	NULL,

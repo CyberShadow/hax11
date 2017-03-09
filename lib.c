@@ -134,7 +134,7 @@ static void needConfig()
 	configLoaded = 1;
 
 	// Default settings
-	config.mainX = 1920;
+	config.mainX = 0;
 	config.mainY = 0;
 	config.mainW = 3840;
 	config.mainH = 2160;

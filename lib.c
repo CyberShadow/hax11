@@ -198,8 +198,8 @@ static void fixSize(
 		*width = config.mainW;
 
 	// Fix spanning one half of a MST monitor
-	if (*width == 1920 && *height == 2160)
-		*width = 3840;
+	if (*width == config.mainW/2 && *height == config.mainH)
+		*width = config.mainW;
 }
 
 static void fixCoords(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
@@ -218,17 +218,17 @@ static void fixCoords(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 
 static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 {
-	if (*width == 1920 && *height == 2160) // Is 4K MST panel?
+	if (*width == config.mainW/2 && *height == config.mainH) // Is 4K MST panel?
 	{
 		if (config.joinMST)
 		{
 			if (*x == config.mainX) // Left panel
 			{
-				*width = 1920 * 2; // resize
+				*width = config.mainW; // resize
 				//*height = 2160;
 			}
 			else
-			if (*x == config.mainX + 1920) // Right panel
+			if (*x == (INT16)(config.mainX + config.mainW/2)) // Right panel
 				*x = *y = *width = *height = 0; // disable
 		}
 	}

@@ -60,11 +60,43 @@ Name                  | Values  | Description
 `DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)
 `Debug`               | Integer | Log level - Non-zero enables debugging output to stderr and `/tmp/hax11.log`
 
+Beware that your window manager and shell use the same APIs,
+thus having other options enabled for such programs may make other monitors unusable.
+
 A sensible configuration is to have `JoinMST=1` and the `Main*` / `Desktop*` settings in the `default` profile,
 and per-game settings in their executables' profiles.
 
-Beware that your window manager and shell use the same APIs,
-thus having other options enabled for such programs may make other monitors unusable.
+### Example
+
+Here is an example configuration for a two-monitor system.
+On the left is a 1920x1200 monitor; on the right, a 4K monitor which presents itself as two 1920x2160 panels.
+The goal is to have games running full-screen on the 4K monitor.
+
+In `~/.config/hax11/profiles/default`:
+
+```
+JoinMST=1
+
+# Top-left coordinate of your main (4K) screen
+MainX=1920
+MainY=0
+
+# Width and height of the 4K screen
+MainW=3840
+MainH=2160
+```
+
+Then, in `~/.config/hax11/profiles/path\to\game\binary`:
+
+```
+Enable=1
+
+# If this is insufficient, you can also try:
+# ResizeWindows=1
+# MoveWindows=1
+# ResizeAll=1
+# Check the status section for example configurations for some games.
+```
 
 ## Installation
 

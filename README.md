@@ -27,6 +27,11 @@ $ export LD_PRELOAD=`pwd`/\$LIB/hax11.so
 
 Then, from the same shell session, start the desired game or application.
 
+To temporarily disable hax11, unset `LD_PRELOAD` before running a program, e.g.:
+```bash
+$ LD_PRELOAD= xrandr
+```
+
 ## Configuration
 
 By default, this library will not do anything.
@@ -60,11 +65,6 @@ and per-game settings in their executables' profiles.
 
 Beware that your window manager and shell use the same APIs,
 thus having other options enabled for such programs may make other monitors unusable.
-
-To temporarily disable hax11, unset `LD_PRELOAD` before running a program, e.g.:
-```bash
-$ LD_PRELOAD= xrandr
-```
 
 ## Installation
 

@@ -5,7 +5,7 @@ Hackbrary to **H**ook and **A**ugment **X11** protocol calls.
 Attempts to fix game and full-screen application issues on Linux, such as:
 - starting on the wrong monitor
 - spanning too many monitors
-- spanning one half of a 4K MST monitor
+- spanning one half of a tiled (MST) monitor (such as some 4K/5K/8K monitors)
 - refusing to allow selecting a desired resolution
 
 ## Building

@@ -58,6 +58,19 @@ struct Config
 	int actualX;
 	int actualY;
 
+	int mst2X;
+	int mst2Y;
+	unsigned int mst2W;
+	unsigned int mst2H;
+	int mst3X;
+	int mst3Y;
+	unsigned int mst3W;
+	unsigned int mst3H;
+	int mst4X;
+	int mst4Y;
+	unsigned int mst4W;
+	unsigned int mst4H;
+
 	char enable;
 	char debug;
 	char joinMST;
@@ -70,6 +83,12 @@ struct Config
 
 static struct Config config = {};
 static char configLoaded = 0;
+
+enum { maxMST = 4 };
+static int* mstConfigX[maxMST] = { &config.mainX, &config.mst2X, &config.mst3X, &config.mst4X };
+static int* mstConfigY[maxMST] = { &config.mainY, &config.mst2Y, &config.mst3Y, &config.mst4Y };
+static unsigned int* mstConfigW[maxMST] = { &config.mainW, &config.mst2W, &config.mst3W, &config.mst4W };
+static unsigned int* mstConfigH[maxMST] = { &config.mainH, &config.mst2H, &config.mst3H, &config.mst4H };
 
 static void readConfig(const char* fn)
 {
@@ -111,6 +130,20 @@ static void readConfig(const char* fn)
 		PARSE_INT(desktopH)
 		PARSE_INT(actualX)
 		PARSE_INT(actualY)
+
+		PARSE_INT(mst2X)
+		PARSE_INT(mst2Y)
+		PARSE_INT(mst2W)
+		PARSE_INT(mst2H)
+		PARSE_INT(mst3X)
+		PARSE_INT(mst3Y)
+		PARSE_INT(mst3W)
+		PARSE_INT(mst3H)
+		PARSE_INT(mst4X)
+		PARSE_INT(mst4Y)
+		PARSE_INT(mst4W)
+		PARSE_INT(mst4H)
+
 		PARSE_INT(enable)
 		PARSE_INT(debug)
 		PARSE_INT(joinMST)
@@ -119,7 +152,11 @@ static void readConfig(const char* fn)
 		PARSE_INT(resizeAll)
 		PARSE_INT(moveWindows)
 		PARSE_INT(fork)
+
+		/* else */
 			log_error("Unknown option: %s\n", buf);
+
+		#undef PARSE_INT
 	}
 	fclose(f);
 	//log_debug("Read config: %d %d %d %d\n", config.joinMST, config.maskOtherMonitors, config.resizeWindows, config.moveWindows);
@@ -218,25 +255,28 @@ static void fixCoords(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 
 static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 {
-	if (*width == config.mainW/2 && *height == config.mainH) // Is 4K MST panel?
+	if (config.joinMST)
 	{
-		if (config.joinMST)
-		{
-			if (*x == config.mainX) // Left panel
+		for (int n=0; n<maxMST; n++)
+			if (*mstConfigW[n])
 			{
-				*width = config.mainW; // resize
-				//*height = 2160;
+				if (*width == *mstConfigW[n] / 2 && *height == *mstConfigH[n]) // Is MST panel?
+				{
+					if (*x == *mstConfigX[n]) // Left panel
+					{
+						*width = *mstConfigW[n]; // resize
+						//*height = 2160;
+					}
+					else
+					if (*x == (INT16)(*mstConfigX[n] + *mstConfigY[n] / 2)) // Right panel
+						*x = *y = *width = *height = 0; // disable
+				}
 			}
-			else
-			if (*x == (INT16)(config.mainX + config.mainW/2)) // Right panel
-				*x = *y = *width = *height = 0; // disable
-		}
 	}
-	else
-	{
-		if (config.maskOtherMonitors)
+
+	if (config.maskOtherMonitors)
+		if (*width != config.mainW || *height != config.mainH)
 			*x = *y = *width = *height = 0; // disable
-	}
 }
 
 #include <sys/socket.h>

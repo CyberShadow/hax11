@@ -175,7 +175,7 @@ static void needConfig()
 	config.mainY = 0;
 	config.mainW = 3840;
 	config.mainH = 2160;
-	config.desktopW = 3840+1920;
+	config.desktopW = 3840;
 	config.desktopH = 2160;
 
 	char buf[1024] = {0};

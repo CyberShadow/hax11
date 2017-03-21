@@ -198,7 +198,7 @@ static void fixSize(
 		*width = config.mainW;
 
 	// Fix spanning one half of a MST monitor
-	if (*width == config.mainW/2 && *height == config.mainH)
+	if (config.joinMST && *width == config.mainW/2 && *height == config.mainH)
 		*width = config.mainW;
 }
 

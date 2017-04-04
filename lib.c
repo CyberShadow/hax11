@@ -260,7 +260,9 @@ static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 		for (int n=0; n<maxMST; n++)
 			if (*mstConfigW[n])
 			{
-				if (*width == *mstConfigW[n] / 2 && *height == *mstConfigH[n]) // Is MST panel?
+				if (*width  == *mstConfigW[n] / 2
+				 && *height == *mstConfigH[n]
+				 && *y      == *mstConfigY[n]) // Is MST panel?
 				{
 					if (*x == *mstConfigX[n]) // Left panel
 					{
@@ -268,7 +270,7 @@ static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 						//*height = 2160;
 					}
 					else
-					if (*x == (INT16)(*mstConfigX[n] + *mstConfigY[n] / 2)) // Right panel
+					if (*x == (INT16)(*mstConfigX[n] + *mstConfigW[n] / 2)) // Right panel
 						*x = *y = *width = *height = 0; // disable
 				}
 			}

@@ -79,6 +79,7 @@ struct Config
 	char resizeAll;
 	char moveWindows;
 	char fork;
+	char filterFocus;
 };
 
 static struct Config config = {};
@@ -152,6 +153,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(resizeAll)
 		PARSE_INT(moveWindows)
 		PARSE_INT(fork)
+		PARSE_INT(filterFocus)
 
 		/* else */
 			log_error("Unknown option: %s\n", buf);
@@ -1013,6 +1015,12 @@ static void* x11connThreadWriteProc(void* dataPtr)
 
 		if (config.debug >= 2 && config.actualX && config.actualY && memmem(buf, ofs, &config.actualX, 2) && memmem(buf, ofs, &config.actualY, 2))
 			log_debug2("   Found actualW/H in output! ----------------------------------------------------------------------------------------------\n");
+
+		if (reply->generic.type == FocusOut && config.filterFocus)
+		{
+			log_debug("Filtering out FocusOut event\n");
+			continue;
+		}
 
 		if (!sendAll(data->client, buf, ofs)) goto done;
 	}

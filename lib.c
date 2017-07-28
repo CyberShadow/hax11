@@ -311,10 +311,16 @@ static void hexDump(const void* buf, size_t len, char prefix1, char prefix2)
 
 #include <sys/socket.h>
 
+#define ANCIL_SIZE 256
 struct Connection
 {
 	int recvfd, sendfd;
 	char dir; // for logging
+
+	// Ancillary data buffer.
+	// Necessary to pass around file descriptors needed for DRI3.
+	char ancilBuf[ANCIL_SIZE];
+	size_t ancilRead, ancilWrite;
 };
 
 static char sendAll(struct Connection* conn, const void* buf, size_t length)
@@ -322,9 +328,27 @@ static char sendAll(struct Connection* conn, const void* buf, size_t length)
 	int remaining = length;
 	while (remaining)
 	{
-		int len = send(conn->sendfd, buf, remaining, MSG_NOSIGNAL);
+		struct iovec iov;
+		iov.iov_base = (void*)buf;
+		iov.iov_len = remaining;
+
+		struct msghdr msg;
+		msg.msg_name = NULL;
+		msg.msg_namelen = 0;
+		msg.msg_iov = &iov;
+		msg.msg_iovlen = 1;
+		msg.msg_control = conn->ancilBuf + conn->ancilRead;
+		msg.msg_controllen = conn->ancilWrite - conn->ancilRead;
+
+		int len = sendmsg(conn->sendfd, &msg, MSG_NOSIGNAL);
 		if (len <= 0)
 			return 0;
+
+		hexDump(msg.msg_control, msg.msg_controllen, conn->dir, '%');
+		conn->ancilRead += msg.msg_controllen;
+		if (conn->ancilRead == conn->ancilWrite)
+			conn->ancilRead = conn->ancilWrite = 0;
+
 		hexDump(buf, len, conn->dir, '=');
 		buf += len;
 		remaining -= len;
@@ -337,9 +361,28 @@ static char recvAll(struct Connection* conn, void* buf, size_t length)
 	int remaining = length;
 	while (remaining)
 	{
-		int len = recv(conn->recvfd, buf, remaining, 0);
-		if (len <= 0)
+		struct iovec iov;
+		iov.iov_base = buf;
+		iov.iov_len = remaining;
+
+		struct msghdr msg;
+		msg.msg_name = NULL;
+		msg.msg_namelen = 0;
+		msg.msg_iov = &iov;
+		msg.msg_iovlen = 1;
+		msg.msg_control = conn->ancilBuf + conn->ancilWrite;
+		msg.msg_controllen = ANCIL_SIZE - conn->ancilWrite;
+
+		int len = recvmsg(conn->recvfd, &msg, 0);
+		if (len < 0)
 			return 0;
+
+		hexDump(msg.msg_control, msg.msg_controllen, conn->dir, '*');
+		conn->ancilWrite += msg.msg_controllen;
+
+		if (len == 0)
+			return 0;
+
 		hexDump(buf, len, conn->dir, '-');
 		buf += len;
 		remaining -= len;
@@ -621,7 +664,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 	size_t bufLen = 0;
 	bufSize(&buf, &bufLen, 1<<16);
 
-	struct Connection conn;
+	struct Connection conn = {};
 	conn.recvfd = data->client;
 	conn.sendfd = data->server;
 	conn.dir = '<';
@@ -884,7 +927,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 	unsigned char *buf = NULL;
 	size_t bufLen = 0;
 
-	struct Connection conn;
+	struct Connection conn = {};
 	conn.recvfd = data->server;
 	conn.sendfd = data->client;
 	conn.dir = '>';

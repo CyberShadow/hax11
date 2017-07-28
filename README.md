@@ -55,7 +55,7 @@ Name                  | Values  | Description
 `ResizeAll`           | `0`/`1` | Boolean - Resize (stretch) all windows, not just those matching the size of one MST panel
 `MoveWindows`         | `0`/`1` | Boolean - Whether to forcibly move windows created at (0,0) to the primary monitor
 `Fork`                | `0`/`1` | Boolean - Move processing to a separate forked process.
-`FilterFocus`         | Integer | Boolean - Filter out `FocusOut` events, making games think they always have focus.
+`FilterFocus`         | `0`/`1` | Boolean - Filter out `FocusOut` events, making games think they always have focus.
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
 `MainW`/`H`           | Integer | The resolution of your primary monitor (or total resolution of monitors to be used for games)
 `DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)

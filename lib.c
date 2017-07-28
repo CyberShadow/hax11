@@ -567,7 +567,7 @@ static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
 	}
 }
 
-int strmemcmp(const char* str, const void* mem, size_t meml)
+static int strmemcmp(const char* str, const void* mem, size_t meml)
 {
 	size_t strl = strlen(str);
 	if (strl != meml)

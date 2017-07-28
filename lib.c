@@ -283,9 +283,29 @@ static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 			*x = *y = *width = *height = 0; // disable
 }
 
+static void hexDump(const void* buf, size_t len, char prefix1, char prefix2)
+{
+	if (config.debug < 3)
+		return;
+
+	while (len)
+	{
+		size_t n = len > 16 ? 16 : len;
+		char textbuf[16*3+1];
+		char *textptr = textbuf;
+
+		for (size_t i = 0; i < n; i++)
+			textptr += sprintf(textptr, " %02X", ((const unsigned char*)buf)[i]);
+		log_error("%c%c%s\n", prefix1, prefix2, textbuf);
+
+		buf += n;
+		len -= n;
+	}
+}
+
 #include <sys/socket.h>
 
-static char sendAll(int fd, const void* buf, size_t length)
+static char sendAll(int fd, const void* buf, size_t length, char dir)
 {
 	int remaining = length;
 	while (remaining)
@@ -293,13 +313,14 @@ static char sendAll(int fd, const void* buf, size_t length)
 		int len = send(fd, buf, remaining, MSG_NOSIGNAL);
 		if (len <= 0)
 			return 0;
+		hexDump(buf, len, dir, '=');
 		buf += len;
 		remaining -= len;
 	}
 	return 1;
 }
 
-static char recvAll(int fd, void* buf, size_t length)
+static char recvAll(int fd, void* buf, size_t length, char dir)
 {
 	int remaining = length;
 	while (remaining)
@@ -307,6 +328,7 @@ static char recvAll(int fd, void* buf, size_t length)
 		int len = recv(fd, buf, remaining, 0);
 		if (len <= 0)
 			return 0;
+		hexDump(buf, len, dir, '-');
 		buf += len;
 		remaining -= len;
 	}
@@ -588,18 +610,18 @@ static void* x11connThreadReadProc(void* dataPtr)
 	bufSize(&buf, &bufLen, 1<<16);
 
 	xConnClientPrefix header;
-	if (!recvAll(data->client, &header, sizeof(header))) goto done;
+	if (!recvAll(data->client, &header, sizeof(header), '<')) goto done;
 	if (header.byteOrder != 'l')
 	{
 		log_debug("Unsupported byte order %c!\n", header.byteOrder);
 		goto done;
 	}
-	if (!sendAll(data->server, &header, sz_xConnClientPrefix)) goto done;
+	if (!sendAll(data->server, &header, sz_xConnClientPrefix, '<')) goto done;
 
-	if (!recvAll(data->client, buf, pad(header.nbytesAuthProto))) goto done;
-	if (!sendAll(data->server, buf, pad(header.nbytesAuthProto))) goto done;
-	if (!recvAll(data->client, buf, pad(header.nbytesAuthString))) goto done;
-	if (!sendAll(data->server, buf, pad(header.nbytesAuthString))) goto done;
+	if (!recvAll(data->client, buf, pad(header.nbytesAuthProto), '<')) goto done;
+	if (!sendAll(data->server, buf, pad(header.nbytesAuthProto), '<')) goto done;
+	if (!recvAll(data->client, buf, pad(header.nbytesAuthString), '<')) goto done;
+	if (!sendAll(data->server, buf, pad(header.nbytesAuthString), '<')) goto done;
 
 	unsigned short sequenceNumber = 0;
 
@@ -608,14 +630,14 @@ static void* x11connThreadReadProc(void* dataPtr)
 		sequenceNumber++;
 
 		size_t ofs = 0;
-		if (!recvAll(data->client, buf+ofs, sz_xReq)) goto done;
+		if (!recvAll(data->client, buf+ofs, sz_xReq, '<')) goto done;
 		ofs += sz_xReq;
 
 		const xReq* req = (xReq*)buf;
 		uint requestLength = req->length * 4;
 		if (requestLength == 0) // Big Requests Extension
 		{
-			recvAll(data->client, buf+ofs, 4);
+			recvAll(data->client, buf+ofs, 4, '<');
 			requestLength = *(uint*)(buf+ofs) * 4;
 			ofs += 4;
 		}
@@ -623,7 +645,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 		bufSize(&buf, &bufLen, requestLength);
 		req = (xReq*)buf; // in case bufSize moved buf
 
-		if (!recvAll(data->client, buf+ofs, requestLength - ofs)) goto done;
+		if (!recvAll(data->client, buf+ofs, requestLength - ofs, '<')) goto done;
 
 		data->notes[sequenceNumber] = Note_None;
 		switch (req->reqType)
@@ -794,7 +816,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 		if (config.debug >= 2 && config.actualX && config.actualY && memmem(buf, requestLength, &config.actualX, 2) && memmem(buf, requestLength, &config.actualY, 2))
 			log_debug2("   Found actualW/H in input! ----------------------------------------------------------------------------------------------\n");
 
-		if (!sendAll(data->server, buf, requestLength)) goto done;
+		if (!sendAll(data->server, buf, requestLength, '<')) goto done;
 	}
 done:
 	log_debug("Exiting read thread.\n");
@@ -815,21 +837,21 @@ static void* x11connThreadWriteProc(void* dataPtr)
 
 	{
 		xConnSetupPrefix header;
-		if (!recvAll(data->server, &header, sz_xConnSetupPrefix)) goto done;
-		if (!sendAll(data->client, &header, sz_xConnSetupPrefix)) goto done;
+		if (!recvAll(data->server, &header, sz_xConnSetupPrefix, '>')) goto done;
+		if (!sendAll(data->client, &header, sz_xConnSetupPrefix, '>')) goto done;
 
 		log_debug("Server connection setup reply: %d\n", header.success);
 
 		size_t dataLength = header.length * 4;
 		bufSize(&buf, &bufLen, dataLength);
-		if (!recvAll(data->server, buf, dataLength)) goto done;
-		if (!sendAll(data->client, buf, dataLength)) goto done;
+		if (!recvAll(data->server, buf, dataLength, '>')) goto done;
+		if (!sendAll(data->client, buf, dataLength, '>')) goto done;
 	}
 
 	bufSize(&buf, &bufLen, sz_xReply);
 	while (!data->exiting)
 	{
-		if (!recvAll(data->server, buf, sz_xReply)) goto done;
+		if (!recvAll(data->server, buf, sz_xReply, '>')) goto done;
 		size_t ofs = sz_xReply;
 		const xReply* reply = (xReply*)buf;
 
@@ -838,7 +860,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			size_t dataLength = reply->generic.length * 4;
 			bufSize(&buf, &bufLen, ofs + dataLength);
 			reply = (xReply*)buf; // in case bufSize moved buf
-			if (!recvAll(data->server, buf+ofs, dataLength)) goto done;
+			if (!recvAll(data->server, buf+ofs, dataLength, '>')) goto done;
 			ofs += dataLength;
 		}
 		log_debug2(" [%d]Response: %d sequenceNumber=%d length=%d\n", data->index, reply->generic.type, reply->generic.sequenceNumber, ofs);
@@ -1022,7 +1044,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			continue;
 		}
 
-		if (!sendAll(data->client, buf, ofs)) goto done;
+		if (!sendAll(data->client, buf, ofs, '>')) goto done;
 	}
 done:
 	log_debug("Exiting write thread.\n");

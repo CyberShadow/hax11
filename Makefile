@@ -17,6 +17,8 @@ lib64/hax11.so: lib64 lib.c Makefile
 	gcc -m64 -Wall -Wextra -g lib.c -o $@ -fPIC -shared -ldl -D_GNU_SOURCE
 
 install:
+	install -d $(PREFIX)/$(LIB32)/
+	install -d $(PREFIX)/$(LIB64)/
 	install -m 644 lib32/hax11.so $(PREFIX)/$(LIB32)/
 	install -m 644 lib64/hax11.so $(PREFIX)/$(LIB64)/
 	echo "export LD_PRELOAD=$(PREFIX)/\\\$$LIB/hax11.so " > /etc/profile.d/hax11.sh

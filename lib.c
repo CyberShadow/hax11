@@ -80,6 +80,8 @@ struct Config
 	char moveWindows;
 	char fork;
 	char filterFocus;
+	char noMouseGrab;
+	char noKeyboardGrab;
 };
 
 static struct Config config = {};
@@ -154,6 +156,8 @@ static void readConfig(const char* fn)
 		PARSE_INT(moveWindows)
 		PARSE_INT(fork)
 		PARSE_INT(filterFocus)
+		PARSE_INT(noMouseGrab)
+		PARSE_INT(noKeyboardGrab)
 
 		/* else */
 			log_error("Unknown option: %s\n", buf);
@@ -368,13 +372,13 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL, // 30
-	NULL,
-	NULL,
+	"GrabPointer",
+	"UngrabPointer",
+	"GrabButton",
+	"UngrabButton",
+	"ChangeActivePointerGrab", // 30
+	"GrabKeyboard",
+	"UngrabKeyboard",
 	NULL,
 	NULL,
 	NULL,
@@ -748,7 +752,28 @@ static void* x11connThreadReadProc(void* dataPtr)
 					data->notes[sequenceNumber] = Note_X_QueryExtension_NV_GLX;
 				else
 					data->notes[sequenceNumber] = Note_X_QueryExtension_Other;
+				break;
 			}
+
+			case X_GrabPointer:
+				if (config.noMouseGrab)
+				{
+					log_debug("Clobbering X_GrabPointer event\n");
+					// Specify an obviously-invalid value
+					xGrabPointerReq* req = (xGrabPointerReq*)buf;
+					req->time = -1;
+				}
+				break;
+
+			case X_GrabKeyboard:
+				if (config.noKeyboardGrab)
+				{
+					log_debug("Clobbering X_GrabKeyboard event\n");
+					// Specify an obviously-invalid value
+					xGrabKeyboardReq* req = (xGrabKeyboardReq*)buf;
+					req->time = -1;
+				}
+				break;
 
 			case 0:
 				break;

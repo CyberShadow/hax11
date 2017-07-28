@@ -56,6 +56,8 @@ Name                  | Values  | Description
 `MoveWindows`         | `0`/`1` | Boolean - Whether to forcibly move windows created at (0,0) to the primary monitor
 `Fork`                | `0`/`1` | Boolean - Move processing to a separate forked process.
 `FilterFocus`         | `0`/`1` | Boolean - Filter out `FocusOut` events, making games think they always have focus.
+`NoMouseGrab`         | `0`/`1` | Boolean - Filter out `GrabPointer` requests, preventing games from exclusively grabbing the mouse pointer.
+`NoKeyboardGrab`      | `0`/`1` | Boolean - Filter out `GrabKeyboard` requests, preventing games from exclusively grabbing the keyboard, and thus disabling global hotkeys.
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
 `MainW`/`H`           | Integer | The resolution of your primary monitor (or total resolution of monitors to be used for games)
 `DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)

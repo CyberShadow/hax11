@@ -82,6 +82,7 @@ struct Config
 	char filterFocus;
 	char noMouseGrab;
 	char noKeyboardGrab;
+	char dumb; // undocumented - act as a dumb pipe, nothing more
 };
 
 static struct Config config = {};
@@ -158,6 +159,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(filterFocus)
 		PARSE_INT(noMouseGrab)
 		PARSE_INT(noKeyboardGrab)
+		PARSE_INT(dumb)
 
 		/* else */
 			log_error("Unknown option: %s\n", buf);
@@ -624,24 +626,35 @@ static void* x11connThreadReadProc(void* dataPtr)
 	conn.sendfd = data->server;
 	conn.dir = '<';
 
-	xConnClientPrefix header;
-	if (!recvAll(&conn, &header, sizeof(header))) goto done;
-	if (header.byteOrder != 'l')
+	if (!config.dumb)
 	{
-		log_debug("Unsupported byte order %c!\n", header.byteOrder);
-		goto done;
-	}
-	if (!sendAll(&conn, &header, sz_xConnClientPrefix)) goto done;
+		xConnClientPrefix header;
+		if (!recvAll(&conn, &header, sizeof(header))) goto done;
+		if (header.byteOrder != 'l')
+		{
+			log_debug("Unsupported byte order %c!\n", header.byteOrder);
+			goto done;
+		}
+		if (!sendAll(&conn, &header, sz_xConnClientPrefix)) goto done;
 
-	if (!recvAll(&conn, buf, pad(header.nbytesAuthProto))) goto done;
-	if (!sendAll(&conn, buf, pad(header.nbytesAuthProto))) goto done;
-	if (!recvAll(&conn, buf, pad(header.nbytesAuthString))) goto done;
-	if (!sendAll(&conn, buf, pad(header.nbytesAuthString))) goto done;
+		if (!recvAll(&conn, buf, pad(header.nbytesAuthProto))) goto done;
+		if (!sendAll(&conn, buf, pad(header.nbytesAuthProto))) goto done;
+		if (!recvAll(&conn, buf, pad(header.nbytesAuthString))) goto done;
+		if (!sendAll(&conn, buf, pad(header.nbytesAuthString))) goto done;
+	}
 
 	unsigned short sequenceNumber = 0;
 
 	while (!data->exiting)
 	{
+		if (config.dumb)
+		{
+			char c[1];
+			if (!recvAll(&conn, c, 1)) goto done;
+			if (!sendAll(&conn, c, 1)) goto done;
+			continue;
+		}
+
 		sequenceNumber++;
 
 		size_t ofs = 0;
@@ -876,6 +889,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 	conn.sendfd = data->client;
 	conn.dir = '>';
 
+	if (!config.dumb)
 	{
 		xConnSetupPrefix header;
 		if (!recvAll(&conn, &header, sz_xConnSetupPrefix)) goto done;
@@ -892,6 +906,14 @@ static void* x11connThreadWriteProc(void* dataPtr)
 	bufSize(&buf, &bufLen, sz_xReply);
 	while (!data->exiting)
 	{
+		if (config.dumb)
+		{
+			char c[1];
+			if (!recvAll(&conn, c, 1)) goto done;
+			if (!sendAll(&conn, c, 1)) goto done;
+			continue;
+		}
+
 		if (!recvAll(&conn, buf, sz_xReply)) goto done;
 		size_t ofs = sz_xReply;
 		const xReply* reply = (xReply*)buf;

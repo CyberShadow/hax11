@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -596,6 +597,8 @@ typedef struct
 	unsigned char opcode_RANDR;
 	unsigned char opcode_Xinerama;
 	unsigned char opcode_NV_GLX;
+	CARD16 serial, serialDelta;
+	unsigned char skip[1<<16];
 } X11ConnData;
 
 enum
@@ -616,6 +619,16 @@ enum
 	Note_X_XineramaQueryScreens,
 	Note_NV_GLX,
 };
+
+static void injectRequest(X11ConnData *data, struct Connection* conn, void* buf, size_t size)
+{
+	/* TODO: this is not thread-safe */
+	const xReq* req = (xReq*)buf;
+	sendAll(conn, req, size);
+	CARD16 sequenceNumber = ++data->serial;
+	data->skip[sequenceNumber] = true;
+	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
+}
 
 static void* x11connThreadReadProc(void* dataPtr)
 {
@@ -646,8 +659,6 @@ static void* x11connThreadReadProc(void* dataPtr)
 		if (!sendAll(&conn, buf, pad(header.nbytesAuthString))) goto done;
 	}
 
-	unsigned short sequenceNumber = 0;
-
 	while (!data->exiting)
 	{
 		if (config.dumb)
@@ -657,8 +668,6 @@ static void* x11connThreadReadProc(void* dataPtr)
 			if (!sendAll(&conn, c, 1)) goto done;
 			continue;
 		}
-
-		sequenceNumber++;
 
 		size_t ofs = 0;
 		if (!recvAll(&conn, buf+ofs, sz_xReq)) goto done;
@@ -672,6 +681,7 @@ static void* x11connThreadReadProc(void* dataPtr)
 			requestLength = *(uint*)(buf+ofs) * 4;
 			ofs += 4;
 		}
+		CARD16 sequenceNumber = ++data->serial;
 		log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
 		bufSize(&buf, &bufLen, requestLength);
 		req = (xReq*)buf; // in case bufSize moved buf
@@ -679,6 +689,8 @@ static void* x11connThreadReadProc(void* dataPtr)
 		if (!recvAll(&conn, buf+ofs, requestLength - ofs)) goto done;
 
 		data->notes[sequenceNumber] = Note_None;
+		data->skip[sequenceNumber] = false;
+
 		switch (req->reqType)
 		{
 			// Fix for games that create the window of the wrong size or on the wrong monitor.
@@ -919,7 +931,7 @@ static void* x11connThreadWriteProc(void* dataPtr)
 
 		if (!recvAll(&conn, buf, sz_xReply)) goto done;
 		size_t ofs = sz_xReply;
-		const xReply* reply = (xReply*)buf;
+		xReply* reply = (xReply*)buf;
 
 		if (reply->generic.type == X_Reply || reply->generic.type == GenericEvent)
 		{
@@ -1117,6 +1129,17 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			log_debug("Filtering out FocusOut event\n");
 			continue;
 		}
+
+		if (reply->generic.type < 2 && // reply or error only, not event
+			data->skip[reply->generic.sequenceNumber])
+		{
+			log_debug("  Skipping this reply\n");
+			data->serialDelta++;
+			data->skip[reply->generic.sequenceNumber] = false;
+			continue;
+		}
+
+		reply->generic.sequenceNumber -= data->serialDelta;
 
 		if (!sendAll(&conn, buf, ofs)) goto done;
 	}

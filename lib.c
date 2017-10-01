@@ -525,6 +525,48 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	"NoOperation",
+	NULL,
+};
+
+static const char *responseNames[256] =
+{
+	"Error",
+	"Reply",
+	"KeyPress",
+	"KeyRelease",
+	"ButtonPress",
+	"ButtonRelease",
+	"MotionNotify",
+	"EnterNotify",
+	"LeaveNotify",
+	"FocusIn",
+	"FocusOut",
+	"KeymapNotify",
+	"Expose",
+	"GraphicsExpose",
+	"NoExpose",
+	"VisibilityNotify",
+	"CreateNotify",
+	"DestroyNotify",
+	"UnmapNotify",
+	"MapNotify",
+	"MapRequest",
+	"ReparentNotify",
+	"ConfigureNotify",
+	"ConfigureRequest",
+	"GravityNotify",
+	"ResizeRequest",
+	"CirculateNotify",
+	"CirculateRequest",
+	"PropertyNotify",
+	"SelectionClear",
+	"SelectionRequest",
+	"SelectionNotify",
+	"ColormapNotify",
+	"ClientMessage",
+	"MappingNotify",
+	"GenericEvent",
+	NULL,
 };
 
 static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
@@ -887,7 +929,8 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			if (!recvAll(&conn, buf+ofs, dataLength)) goto done;
 			ofs += dataLength;
 		}
-		log_debug2(" [%d]Response: %d sequenceNumber=%d length=%d\n", data->index, reply->generic.type, reply->generic.sequenceNumber, ofs);
+		log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%d\n",
+			data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
 
 		if (reply->generic.type == X_Reply)
 		{

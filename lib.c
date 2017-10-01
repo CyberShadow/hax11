@@ -932,6 +932,13 @@ static void* x11connThreadWriteProc(void* dataPtr)
 		log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%d\n",
 			data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
 
+		if (reply->generic.type == X_Error)
+		{
+			xError* err = (xError*)buf;
+			log_debug2(" [%d] Error - code=%d resourceID=0x%x minorCode=%d majorCode=%d (%s)\n",
+				data->index, err->errorCode, err->resourceID, err->minorCode, err->majorCode, requestNames[err->majorCode]);
+		}
+
 		if (reply->generic.type == X_Reply)
 		{
 			switch (data->notes[reply->generic.sequenceNumber])

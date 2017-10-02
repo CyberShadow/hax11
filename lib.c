@@ -597,7 +597,7 @@ typedef struct
 	unsigned char opcode_RANDR;
 	unsigned char opcode_Xinerama;
 	unsigned char opcode_NV_GLX;
-	CARD16 serial, serialDelta;
+	CARD16 serial, serialLast, serialDelta;
 	unsigned char skip[1<<16];
 } X11ConnData;
 
@@ -1130,12 +1130,21 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			continue;
 		}
 
+		while (data->serialLast != reply->generic.sequenceNumber)
+		{
+			data->skip[data->serialLast] = false;
+			data->serialLast++;
+			if (data->skip[data->serialLast])
+			{
+				data->serialDelta++;
+				log_debug2("  Incrementing serialDelta for injected reply (now at %d)\n", data->serialDelta);
+			}
+		}
+
 		if (reply->generic.type < 2 && // reply or error only, not event
 			data->skip[reply->generic.sequenceNumber])
 		{
-			log_debug("  Skipping this reply\n");
-			data->serialDelta++;
-			data->skip[reply->generic.sequenceNumber] = false;
+			log_debug2("  Skipping this reply\n");
 			continue;
 		}
 

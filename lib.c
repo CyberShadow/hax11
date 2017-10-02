@@ -84,6 +84,7 @@ struct Config
 	char noMouseGrab;
 	char noKeyboardGrab;
 	char dumb; // undocumented - act as a dumb pipe, nothing more
+	char confineMouse;
 };
 
 static struct Config config = {};
@@ -161,6 +162,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(noMouseGrab)
 		PARSE_INT(noKeyboardGrab)
 		PARSE_INT(dumb)
+		PARSE_INT(confineMouse)
 
 		/* else */
 			log_error("Unknown option: %s\n", buf);
@@ -599,12 +601,14 @@ typedef struct
 	unsigned char opcode_NV_GLX;
 	CARD16 serial, serialLast, serialDelta;
 	unsigned char skip[1<<16];
+	Window focus;
 } X11ConnData;
 
 enum
 {
 	Note_None,
 	Note_X_GetGeometry,
+	Note_X_GetInputFocus,
 	Note_X_InternAtom_Other,
 	Note_X_QueryExtension_XFree86_VidModeExtension,
 	Note_X_QueryExtension_RANDR,
@@ -628,6 +632,38 @@ static void injectRequest(X11ConnData *data, struct Connection* conn, void* buf,
 	CARD16 sequenceNumber = ++data->serial;
 	data->skip[sequenceNumber] = true;
 	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
+}
+
+static void grabMouse(X11ConnData *data, bool grab, Window window)
+{
+	struct Connection conn = {};
+	conn.recvfd = data->client;
+	conn.sendfd = data->server;
+	conn.dir = '<';
+
+	if (grab)
+	{
+		xGrabPointerReq req;
+		req.reqType = X_GrabPointer;
+		req.ownerEvents = true; // ?
+		req.length = sizeof(req)/4;
+		req.grabWindow = window;
+		req.eventMask = ~0xFFFF8003;
+		req.pointerMode = 1 /* Asynchronous */;
+		req.keyboardMode = 1 /* Asynchronous */;
+		req.confineTo = window;
+		req.cursor = None;
+		req.time = CurrentTime;
+		injectRequest(data, &conn, &req, sizeof(req));
+	}
+	else
+	{
+		xResourceReq req;
+		req.reqType = X_UngrabPointer;
+		req.length = sizeof(req)/4;
+		req.id = CurrentTime;
+		injectRequest(data, &conn, &req, sizeof(req));
+	}
 }
 
 static void* x11connThreadReadProc(void* dataPtr)
@@ -746,6 +782,12 @@ static void* x11connThreadReadProc(void* dataPtr)
 			case X_GetGeometry:
 			{
 				data->notes[sequenceNumber] = Note_X_GetGeometry;
+				break;
+			}
+
+			case X_GetInputFocus:
+			{
+				data->notes[sequenceNumber] = Note_X_GetInputFocus;
 				break;
 			}
 
@@ -964,6 +1006,14 @@ static void* x11connThreadWriteProc(void* dataPtr)
 					break;
 				}
 
+				case Note_X_GetInputFocus:
+				{
+					xGetInputFocusReply* reply = (xGetInputFocusReply*)buf;
+					log_debug2("  XGetInputFocus(0x%x)\n", reply->focus);
+					data->focus = reply->focus;
+					break;
+				}
+
 				case Note_X_InternAtom_Other:
 				{
 					xInternAtomReply* reply = (xInternAtomReply*)buf;
@@ -1124,10 +1174,19 @@ static void* x11connThreadWriteProc(void* dataPtr)
 		if (config.debug >= 2 && config.actualX && config.actualY && memmem(buf, ofs, &config.actualX, 2) && memmem(buf, ofs, &config.actualY, 2))
 			log_debug2("   Found actualW/H in output! ----------------------------------------------------------------------------------------------\n");
 
-		if (reply->generic.type == FocusOut && config.filterFocus)
+		if (reply->generic.type == FocusIn || reply->generic.type == FocusOut)
 		{
-			log_debug("Filtering out FocusOut event\n");
-			continue;
+			//XFocusChangeEvent* event = (XFocusChangeEvent*)reply;
+			if (config.confineMouse)
+			{
+				log_debug("%s mouse grab\n", reply->generic.type == FocusIn ? "Acquiring" : "Releasing");
+				grabMouse(data, reply->generic.type == FocusIn, /* event->window */ data->focus);
+			}
+			if (reply->generic.type == FocusOut && config.filterFocus)
+			{
+				log_debug("Filtering out FocusOut event\n");
+				continue;
+			}
 		}
 
 		while (data->serialLast != reply->generic.sequenceNumber)

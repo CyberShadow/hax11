@@ -8,6 +8,11 @@ Attempts to fix game and full-screen application issues on Linux, such as:
 - spanning one half of a tiled (MST) monitor (such as some 4K/5K/8K monitors)
 - refusing to allow selecting a desired resolution
 
+It can also work around some common annoyances:
+- exclusively grabbing the mouse or keyboard
+- forcefully pausing the game when the window loses focus
+- not restricting the mouse cursor to its window/monitor
+
 ## Building
 
 Build the library:

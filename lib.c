@@ -601,7 +601,7 @@ typedef struct
 	unsigned char opcode_NV_GLX;
 	CARD16 serial, serialLast, serialDelta;
 	unsigned char skip[1<<16];
-	Window focus;
+	bool doMouseGrab;
 } X11ConnData;
 
 enum
@@ -624,46 +624,20 @@ enum
 	Note_NV_GLX,
 };
 
-static void injectRequest(X11ConnData *data, struct Connection* conn, void* buf, size_t size)
-{
-	/* TODO: this is not thread-safe */
-	const xReq* req = (xReq*)buf;
-	sendAll(conn, req, size);
-	CARD16 sequenceNumber = ++data->serial;
-	data->skip[sequenceNumber] = true;
-	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
-}
-
-static void grabMouse(X11ConnData *data, bool grab, Window window)
+static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 {
 	struct Connection conn = {};
 	conn.recvfd = data->client;
 	conn.sendfd = data->server;
 	conn.dir = '<';
 
-	if (grab)
-	{
-		xGrabPointerReq req;
-		req.reqType = X_GrabPointer;
-		req.ownerEvents = true; // ?
-		req.length = sizeof(req)/4;
-		req.grabWindow = window;
-		req.eventMask = ~0xFFFF8003;
-		req.pointerMode = 1 /* Asynchronous */;
-		req.keyboardMode = 1 /* Asynchronous */;
-		req.confineTo = window;
-		req.cursor = None;
-		req.time = CurrentTime;
-		injectRequest(data, &conn, &req, sizeof(req));
-	}
-	else
-	{
-		xResourceReq req;
-		req.reqType = X_UngrabPointer;
-		req.length = sizeof(req)/4;
-		req.id = CurrentTime;
-		injectRequest(data, &conn, &req, sizeof(req));
-	}
+	/* TODO: this is not thread-safe */
+	const xReq* req = (xReq*)buf;
+	sendAll(&conn, req, size);
+	CARD16 sequenceNumber = ++data->serial;
+	data->skip[sequenceNumber] = true;
+	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
+	return sequenceNumber;
 }
 
 static void* x11connThreadReadProc(void* dataPtr)
@@ -1011,9 +985,28 @@ static void* x11connThreadWriteProc(void* dataPtr)
 
 					case Note_X_GetInputFocus:
 					{
-						xGetInputFocusReply* reply = (xGetInputFocusReply*)buf;
-						log_debug2("  XGetInputFocus(0x%x)\n", reply->focus);
-						data->focus = reply->focus;
+						if (data->doMouseGrab)
+						{
+							xGetInputFocusReply* reply = (xGetInputFocusReply*)buf;
+							log_debug2("  XGetInputFocus(0x%x, %d)\n", reply->focus, reply->revertTo);
+
+							log_debug("Acquiring mouse grab\n");
+
+							xGrabPointerReq req;
+							req.reqType = X_GrabPointer;
+							req.ownerEvents = true; // ?
+							req.length = sizeof(req)/4;
+							req.grabWindow = reply->focus;
+							req.eventMask = ~0xFFFF8003;
+							req.pointerMode = 1 /* Asynchronous */;
+							req.keyboardMode = 1 /* Asynchronous */;
+							req.confineTo = reply->focus;
+							req.cursor = None;
+							req.time = CurrentTime;
+							injectRequest(data, &req, sizeof(req));
+
+							data->doMouseGrab = false;
+						}
 						break;
 					}
 
@@ -1178,12 +1171,33 @@ static void* x11connThreadWriteProc(void* dataPtr)
 			case FocusIn:
 				if (config.confineMouse)
 				{
-					log_debug("%s mouse grab\n", reply->generic.type == FocusIn ? "Acquiring" : "Releasing");
-					grabMouse(data, reply->generic.type == FocusIn, /* event->window */ data->focus);
+					if (!data->doMouseGrab)
+					{
+						xReq req;
+						req.reqType = X_GetInputFocus;
+						req.length = sizeof(req)/4;
+						CARD16 sequenceNumber = injectRequest(data, &req, sizeof(req));
+						data->notes[sequenceNumber] = Note_X_GetInputFocus;
+
+						data->doMouseGrab = true;
+					}
 				}
 				break;
 
 			case FocusOut:
+				if (config.confineMouse)
+				{
+					log_debug("Releasing mouse grab\n");
+
+					xResourceReq req;
+					req.reqType = X_UngrabPointer;
+					req.length = sizeof(req)/4;
+					req.id = CurrentTime;
+					injectRequest(data, &req, sizeof(req));
+
+					data->doMouseGrab = false;
+				}
+
 				if (config.filterFocus)
 				{
 					log_debug("Filtering out FocusOut event\n");

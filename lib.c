@@ -231,7 +231,6 @@ static void fixSize(
 	CARD16* width,
 	CARD16* height)
 {
-	needConfig();
 	if (!config.resizeWindows)
 		return;
 

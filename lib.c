@@ -590,16 +590,33 @@ static int strmemcmp(const char* str, const void* mem, size_t meml)
 
 typedef struct
 {
+	/// Number of this X server connection for this process
 	int index;
+
+	/// Sockets for the connection to the X server (Xorg) and client (host application)
 	int server, client;
-	char exiting;
+
+	/// Reusable data buffer
+	unsigned char *buf;
+	size_t bufLen;
+
+	/// Connection prefix received and sent
+	bool clientInitialized, serverInitialized;
+
+	/// Notes for correlating replies to their requests (see Note_* enum)
 	unsigned char notes[1<<16];
+
+	/// Learned opcodes for X extensions, as returned by QueryExtension
 	unsigned char opcode_XFree86_VidModeExtension;
 	unsigned char opcode_RANDR;
 	unsigned char opcode_Xinerama;
 	unsigned char opcode_NV_GLX;
+
+	/// Reply serial tracking and correction
 	CARD16 serial, serialLast, serialDelta;
 	unsigned char skip[1<<16];
+
+	/// Whether a mouse-grab is still pending (for the ConfineMouse option)
 	bool doMouseGrab;
 } X11ConnData;
 
@@ -630,7 +647,6 @@ static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 	conn.sendfd = data->server;
 	conn.dir = '<';
 
-	/* TODO: this is not thread-safe */
 	const xReq* req = (xReq*)buf;
 	sendAll(&conn, req, size);
 	CARD16 sequenceNumber = ++data->serial;
@@ -639,600 +655,633 @@ static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 	return sequenceNumber;
 }
 
-static void* x11connThreadReadProc(void* dataPtr)
+static bool handleClientData(X11ConnData* data)
 {
-	X11ConnData* data = (X11ConnData*)dataPtr;
-	unsigned char *buf = NULL;
-	size_t bufLen = 0;
-	bufSize(&buf, &bufLen, 1<<16);
-
 	struct Connection conn = {};
 	conn.recvfd = data->client;
 	conn.sendfd = data->server;
 	conn.dir = '<';
 
-	if (!config.dumb)
+	if (config.dumb)
+	{
+		char c[1];
+		if (!recvAll(&conn, c, 1)) return false;
+		if (!sendAll(&conn, c, 1)) return false;
+		return true;
+	}
+
+	if (!data->clientInitialized)
 	{
 		xConnClientPrefix header;
-		if (!recvAll(&conn, &header, sizeof(header))) goto done;
+		if (!recvAll(&conn, &header, sizeof(header))) return false;
 		if (header.byteOrder != 'l')
 		{
 			log_debug("Unsupported byte order %c!\n", header.byteOrder);
-			goto done;
+			return false;
 		}
-		if (!sendAll(&conn, &header, sz_xConnClientPrefix)) goto done;
+		if (!sendAll(&conn, &header, sz_xConnClientPrefix)) return false;
 
-		if (!recvAll(&conn, buf, pad(header.nbytesAuthProto))) goto done;
-		if (!sendAll(&conn, buf, pad(header.nbytesAuthProto))) goto done;
-		if (!recvAll(&conn, buf, pad(header.nbytesAuthString))) goto done;
-		if (!sendAll(&conn, buf, pad(header.nbytesAuthString))) goto done;
+		if (!recvAll(&conn, data->buf, pad(header.nbytesAuthProto))) return false;
+		if (!sendAll(&conn, data->buf, pad(header.nbytesAuthProto))) return false;
+		if (!recvAll(&conn, data->buf, pad(header.nbytesAuthString))) return false;
+		if (!sendAll(&conn, data->buf, pad(header.nbytesAuthString))) return false;
+
+		data->clientInitialized = true;
+		return true;
 	}
 
-	while (!data->exiting)
+	size_t ofs = 0;
+	if (!recvAll(&conn, data->buf+ofs, sz_xReq)) return false;
+	ofs += sz_xReq;
+
+	const xReq* req = (xReq*)data->buf;
+	uint requestLength = req->length * 4;
+	if (requestLength == 0) // Big Requests Extension
 	{
-		if (config.dumb)
-		{
-			char c[1];
-			if (!recvAll(&conn, c, 1)) goto done;
-			if (!sendAll(&conn, c, 1)) goto done;
-			continue;
-		}
-
-		size_t ofs = 0;
-		if (!recvAll(&conn, buf+ofs, sz_xReq)) goto done;
-		ofs += sz_xReq;
-
-		const xReq* req = (xReq*)buf;
-		uint requestLength = req->length * 4;
-		if (requestLength == 0) // Big Requests Extension
-		{
-			recvAll(&conn, buf+ofs, 4);
-			requestLength = *(uint*)(buf+ofs) * 4;
-			ofs += 4;
-		}
-		CARD16 sequenceNumber = ++data->serial;
-		log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
-		bufSize(&buf, &bufLen, requestLength);
-		req = (xReq*)buf; // in case bufSize moved buf
-
-		if (!recvAll(&conn, buf+ofs, requestLength - ofs)) goto done;
-
-		data->notes[sequenceNumber] = Note_None;
-		data->skip[sequenceNumber] = false;
-
-		switch (req->reqType)
-		{
-			// Fix for games that create the window of the wrong size or on the wrong monitor.
-			case X_CreateWindow:
-			{
-				xCreateWindowReq* req = (xCreateWindowReq*)buf;
-				log_debug2(" XCreateWindow(%dx%d @ %dx%d)\n", req->width, req->height, req->x, req->y);
-				fixCoords(&req->x, &req->y, &req->width, &req->height);
-				log_debug2(" ->           (%dx%d @ %dx%d)\n", req->width, req->height, req->x, req->y);
-				break;
-			}
-
-			case X_ConfigureWindow:
-			{
-				xConfigureWindowReq* req = (xConfigureWindowReq*)buf;
-
-				INT16 dummyXY = 0;
-				CARD16 dummyW = config.mainW;
-				CARD16 dummyH = config.mainH;
-				INT16 *x = &dummyXY, *y = &dummyXY;
-				CARD16 *w = &dummyW, *h = &dummyH;
-
-				int* ptr = (int*)(buf + sz_xConfigureWindowReq);
-				if (req->mask & 0x0001) // x
-				{
-					x = (INT16*)ptr;
-					ptr++;
-				}
-				if (req->mask & 0x0002) // y
-				{
-					y = (INT16*)ptr;
-					ptr++;
-				}
-				if (req->mask & 0x0004) // width
-				{
-					w = (CARD16*)ptr;
-					ptr++;
-				}
-				if (req->mask & 0x0008) // height
-				{
-					h = (CARD16*)ptr;
-					ptr++;
-				}
-
-				log_debug2(" XConfigureWindow(%dx%d @ %dx%d)\n", *w, *h, *x, *y);
-				fixCoords(x, y, w, h);
-				log_debug2(" ->              (%dx%d @ %dx%d)\n", *w, *h, *x, *y);
-				break;
-			}
-
-			// Fix for games setting their window size based on the X root window size
-			// (which can encompass multiple physical monitors).
-			case X_GetGeometry:
-			{
-				data->notes[sequenceNumber] = Note_X_GetGeometry;
-				break;
-			}
-
-			case X_GetInputFocus:
-			{
-				data->notes[sequenceNumber] = Note_X_GetInputFocus;
-				break;
-			}
-
-			case X_InternAtom:
-			{
-				xInternAtomReq* req = (xInternAtomReq*)buf;
-				const char* name = (const char*)(buf + sz_xInternAtomReq);
-				log_debug2(" XInternAtom: %.*s\n", req->nbytes, name);
-				data->notes[sequenceNumber] = Note_X_InternAtom_Other;
-				break;
-			}
-
-			case X_ChangeProperty:
-			{
-				xChangePropertyReq* req = (xChangePropertyReq*)buf;
-				log_debug2(" XChangeProperty: property=%d type=%d format=%d)\n", req->property, req->type, req->format);
-				if (req->type == XA_WM_SIZE_HINTS)
-				{
-					XSizeHints* data = (XSizeHints*)(buf + sz_xChangePropertyReq);
-					fixCoords((INT16*)&data->x, (INT16*)&data->y, (CARD16*)&data->width, (CARD16*)&data->height);
-					fixSize((CARD16*)&data->max_width, (CARD16*)&data->max_height);
-					fixSize((CARD16*)&data->base_width, (CARD16*)&data->base_height);
-				}
-				break;
-			}
-
-			case X_QueryExtension:
-			{
-				xQueryExtensionReq* req = (xQueryExtensionReq*)buf;
-				const char* name = (const char*)(buf + sz_xQueryExtensionReq);
-				log_debug2(" XQueryExtension(%.*s)\n", req->nbytes, name);
-
-				if (!strmemcmp("XFree86-VidModeExtension", name, req->nbytes))
-					data->notes[sequenceNumber] = Note_X_QueryExtension_XFree86_VidModeExtension;
-				else
-				if (!strmemcmp("RANDR", name, req->nbytes))
-					data->notes[sequenceNumber] = Note_X_QueryExtension_RANDR;
-				else
-				if (!strmemcmp("XINERAMA", name, req->nbytes))
-					data->notes[sequenceNumber] = Note_X_QueryExtension_Xinerama;
-				else
-				if (!strmemcmp("NV-GLX", name, req->nbytes))
-					data->notes[sequenceNumber] = Note_X_QueryExtension_NV_GLX;
-				else
-					data->notes[sequenceNumber] = Note_X_QueryExtension_Other;
-				break;
-			}
-
-			case X_GrabPointer:
-				if (config.noMouseGrab)
-				{
-					log_debug("Clobbering X_GrabPointer event\n");
-					// Specify an obviously-invalid value
-					xGrabPointerReq* req = (xGrabPointerReq*)buf;
-					req->time = -1;
-				}
-				break;
-
-			case X_GrabKeyboard:
-				if (config.noKeyboardGrab)
-				{
-					log_debug("Clobbering X_GrabKeyboard event\n");
-					// Specify an obviously-invalid value
-					xGrabKeyboardReq* req = (xGrabKeyboardReq*)buf;
-					req->time = -1;
-				}
-				break;
-
-			case 0:
-				break;
-
-			default:
-			{
-				if (req->reqType == data->opcode_XFree86_VidModeExtension)
-				{
-					xXF86VidModeGetModeLineReq* req = (xXF86VidModeGetModeLineReq*)buf;
-					log_debug2(" XFree86_VidModeExtension - %d\n", req->xf86vidmodeReqType);
-					switch (req->xf86vidmodeReqType)
-					{
-						case X_XF86VidModeGetModeLine:
-							data->notes[sequenceNumber] = Note_X_XF86VidModeGetModeLine;
-							break;
-						case X_XF86VidModeGetAllModeLines:
-							data->notes[sequenceNumber] = Note_X_XF86VidModeGetAllModeLines;
-							break;
-					}
-				}
-				else
-				if (req->reqType == data->opcode_RANDR)
-				{
-					log_debug2(" RANDR - %d\n", req->data);
-					switch (req->data)
-					{
-						case X_RRGetScreenInfo:
-							data->notes[sequenceNumber] = Note_X_RRGetScreenInfo;
-							break;
-						case X_RRGetScreenResources:
-							data->notes[sequenceNumber] = Note_X_RRGetScreenResources;
-							break;
-						case X_RRGetCrtcInfo:
-							data->notes[sequenceNumber] = Note_X_RRGetCrtcInfo;
-							break;
-					}
-				}
-				else
-				if (req->reqType == data->opcode_Xinerama)
-				{
-					log_debug2(" Xinerama - %d\n", req->data);
-					switch (req->data)
-					{
-						case X_XineramaQueryScreens:
-							data->notes[sequenceNumber] = Note_X_XineramaQueryScreens;
-							break;
-					}
-				}
-				else
-				if (req->reqType == data->opcode_NV_GLX)
-				{
-#if 0
-					char fn[256];
-					sprintf(fn, "/tmp/hax11-NV-%d-req", sequenceNumber);
-					FILE* f = fopen(fn, "wb");
-					fwrite(buf, 1, requestLength, f);
-					fclose(f);
-#endif
-					data->notes[sequenceNumber] = Note_NV_GLX;
-				}
-				break;
-			}
-		}
-
-		if (config.debug >= 2 && config.actualX && config.actualY && memmem(buf, requestLength, &config.actualX, 2) && memmem(buf, requestLength, &config.actualY, 2))
-			log_debug2("   Found actualW/H in input! ----------------------------------------------------------------------------------------------\n");
-
-		if (!sendAll(&conn, buf, requestLength)) goto done;
+		recvAll(&conn, data->buf+ofs, 4);
+		requestLength = *(uint*)(data->buf+ofs) * 4;
+		ofs += 4;
 	}
-done:
-	log_debug("Exiting read thread.\n");
-	data->exiting = 1;
-	shutdown(data->client, SHUT_RDWR);
-	shutdown(data->server, SHUT_RDWR);
-	close(data->client);
-	close(data->server);
-	return NULL;
+	CARD16 sequenceNumber = ++data->serial;
+	log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
+	bufSize(&data->buf, &data->bufLen, requestLength);
+	req = (xReq*)data->buf; // in case bufSize moved buf
+
+	if (!recvAll(&conn, data->buf+ofs, requestLength - ofs)) return false;
+
+	data->notes[sequenceNumber] = Note_None;
+	data->skip[sequenceNumber] = false;
+
+	switch (req->reqType)
+	{
+		// Fix for games that create the window of the wrong size or on the wrong monitor.
+		case X_CreateWindow:
+		{
+			xCreateWindowReq* req = (xCreateWindowReq*)data->buf;
+			log_debug2(" XCreateWindow(%dx%d @ %dx%d)\n", req->width, req->height, req->x, req->y);
+			fixCoords(&req->x, &req->y, &req->width, &req->height);
+			log_debug2(" ->           (%dx%d @ %dx%d)\n", req->width, req->height, req->x, req->y);
+			break;
+		}
+
+		case X_ConfigureWindow:
+		{
+			xConfigureWindowReq* req = (xConfigureWindowReq*)data->buf;
+
+			INT16 dummyXY = 0;
+			CARD16 dummyW = config.mainW;
+			CARD16 dummyH = config.mainH;
+			INT16 *x = &dummyXY, *y = &dummyXY;
+			CARD16 *w = &dummyW, *h = &dummyH;
+
+			int* ptr = (int*)(data->buf + sz_xConfigureWindowReq);
+			if (req->mask & 0x0001) // x
+			{
+				x = (INT16*)ptr;
+				ptr++;
+			}
+			if (req->mask & 0x0002) // y
+			{
+				y = (INT16*)ptr;
+				ptr++;
+			}
+			if (req->mask & 0x0004) // width
+			{
+				w = (CARD16*)ptr;
+				ptr++;
+			}
+			if (req->mask & 0x0008) // height
+			{
+				h = (CARD16*)ptr;
+				ptr++;
+			}
+
+			log_debug2(" XConfigureWindow(%dx%d @ %dx%d)\n", *w, *h, *x, *y);
+			fixCoords(x, y, w, h);
+			log_debug2(" ->              (%dx%d @ %dx%d)\n", *w, *h, *x, *y);
+			break;
+		}
+
+		// Fix for games setting their window size based on the X root window size
+		// (which can encompass multiple physical monitors).
+		case X_GetGeometry:
+		{
+			data->notes[sequenceNumber] = Note_X_GetGeometry;
+			break;
+		}
+
+		case X_GetInputFocus:
+		{
+			data->notes[sequenceNumber] = Note_X_GetInputFocus;
+			break;
+		}
+
+		case X_InternAtom:
+		{
+			xInternAtomReq* req = (xInternAtomReq*)data->buf;
+			const char* name = (const char*)(data->buf + sz_xInternAtomReq);
+			log_debug2(" XInternAtom: %.*s\n", req->nbytes, name);
+			data->notes[sequenceNumber] = Note_X_InternAtom_Other;
+			break;
+		}
+
+		case X_ChangeProperty:
+		{
+			xChangePropertyReq* req = (xChangePropertyReq*)data->buf;
+			log_debug2(" XChangeProperty: property=%d type=%d format=%d)\n", req->property, req->type, req->format);
+			if (req->type == XA_WM_SIZE_HINTS)
+			{
+				XSizeHints* hints = (XSizeHints*)(data->buf + sz_xChangePropertyReq);
+				fixCoords((INT16*)&hints->x, (INT16*)&hints->y, (CARD16*)&hints->width, (CARD16*)&hints->height);
+				fixSize((CARD16*)&hints->max_width, (CARD16*)&hints->max_height);
+				fixSize((CARD16*)&hints->base_width, (CARD16*)&hints->base_height);
+			}
+			break;
+		}
+
+		case X_QueryExtension:
+		{
+			xQueryExtensionReq* req = (xQueryExtensionReq*)data->buf;
+			const char* name = (const char*)(data->buf + sz_xQueryExtensionReq);
+			log_debug2(" XQueryExtension(%.*s)\n", req->nbytes, name);
+
+			if (!strmemcmp("XFree86-VidModeExtension", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_XFree86_VidModeExtension;
+			else
+			if (!strmemcmp("RANDR", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_RANDR;
+			else
+			if (!strmemcmp("XINERAMA", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_Xinerama;
+			else
+			if (!strmemcmp("NV-GLX", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_NV_GLX;
+			else
+				data->notes[sequenceNumber] = Note_X_QueryExtension_Other;
+			break;
+		}
+
+		case X_GrabPointer:
+			if (config.noMouseGrab)
+			{
+				log_debug("Clobbering X_GrabPointer event\n");
+				// Specify an obviously-invalid value
+				xGrabPointerReq* req = (xGrabPointerReq*)data->buf;
+				req->time = -1;
+			}
+			break;
+
+		case X_GrabKeyboard:
+			if (config.noKeyboardGrab)
+			{
+				log_debug("Clobbering X_GrabKeyboard event\n");
+				// Specify an obviously-invalid value
+				xGrabKeyboardReq* req = (xGrabKeyboardReq*)data->buf;
+				req->time = -1;
+			}
+			break;
+
+		case 0:
+			break;
+
+		default:
+		{
+			if (req->reqType == data->opcode_XFree86_VidModeExtension)
+			{
+				xXF86VidModeGetModeLineReq* req = (xXF86VidModeGetModeLineReq*)data->buf;
+				log_debug2(" XFree86_VidModeExtension - %d\n", req->xf86vidmodeReqType);
+				switch (req->xf86vidmodeReqType)
+				{
+					case X_XF86VidModeGetModeLine:
+						data->notes[sequenceNumber] = Note_X_XF86VidModeGetModeLine;
+						break;
+					case X_XF86VidModeGetAllModeLines:
+						data->notes[sequenceNumber] = Note_X_XF86VidModeGetAllModeLines;
+						break;
+				}
+			}
+			else
+			if (req->reqType == data->opcode_RANDR)
+			{
+				log_debug2(" RANDR - %d\n", req->data);
+				switch (req->data)
+				{
+					case X_RRGetScreenInfo:
+						data->notes[sequenceNumber] = Note_X_RRGetScreenInfo;
+						break;
+					case X_RRGetScreenResources:
+						data->notes[sequenceNumber] = Note_X_RRGetScreenResources;
+						break;
+					case X_RRGetCrtcInfo:
+						data->notes[sequenceNumber] = Note_X_RRGetCrtcInfo;
+						break;
+				}
+			}
+			else
+			if (req->reqType == data->opcode_Xinerama)
+			{
+				log_debug2(" Xinerama - %d\n", req->data);
+				switch (req->data)
+				{
+					case X_XineramaQueryScreens:
+						data->notes[sequenceNumber] = Note_X_XineramaQueryScreens;
+						break;
+				}
+			}
+			else
+			if (req->reqType == data->opcode_NV_GLX)
+			{
+#if 0
+				char fn[256];
+				sprintf(fn, "/tmp/hax11-NV-%d-req", sequenceNumber);
+				FILE* f = fopen(fn, "wb");
+				fwrite(data->buf, 1, requestLength, f);
+				fclose(f);
+#endif
+				data->notes[sequenceNumber] = Note_NV_GLX;
+			}
+			break;
+		}
+	}
+
+	if (config.debug >= 2 && config.actualX && config.actualY && memmem(data->buf, requestLength, &config.actualX, 2) && memmem(data->buf, requestLength, &config.actualY, 2))
+		log_debug2("   Found actualW/H in input! ----------------------------------------------------------------------------------------------\n");
+
+	if (!sendAll(&conn, data->buf, requestLength)) return false;
+
+	return true;
 }
 
-static void* x11connThreadWriteProc(void* dataPtr)
+static bool handleServerData(X11ConnData* data)
 {
-	X11ConnData* data = (X11ConnData*)dataPtr;
-
-	unsigned char *buf = NULL;
-	size_t bufLen = 0;
-
 	struct Connection conn = {};
 	conn.recvfd = data->server;
 	conn.sendfd = data->client;
 	conn.dir = '>';
 
-	if (!config.dumb)
+	if (config.dumb)
+	{
+		char c[1];
+		if (!recvAll(&conn, c, 1)) return false;
+		if (!sendAll(&conn, c, 1)) return false;
+		return true;
+	}
+
+	if (!data->serverInitialized)
 	{
 		xConnSetupPrefix header;
-		if (!recvAll(&conn, &header, sz_xConnSetupPrefix)) goto done;
-		if (!sendAll(&conn, &header, sz_xConnSetupPrefix)) goto done;
+		if (!recvAll(&conn, &header, sz_xConnSetupPrefix)) return false;
+		if (!sendAll(&conn, &header, sz_xConnSetupPrefix)) return false;
 
 		log_debug("Server connection setup reply: %d\n", header.success);
 
 		size_t dataLength = header.length * 4;
-		bufSize(&buf, &bufLen, dataLength);
-		if (!recvAll(&conn, buf, dataLength)) goto done;
-		if (!sendAll(&conn, buf, dataLength)) goto done;
+		bufSize(&data->buf, &data->bufLen, dataLength);
+		if (!recvAll(&conn, data->buf, dataLength)) return false;
+		if (!sendAll(&conn, data->buf, dataLength)) return false;
+
+		data->serverInitialized = true;
+		return true;
 	}
 
-	bufSize(&buf, &bufLen, sz_xReply);
-	while (!data->exiting)
+	if (!recvAll(&conn, data->buf, sz_xReply)) return false;
+	size_t ofs = sz_xReply;
+	xReply* reply = (xReply*)data->buf;
+
+	if (reply->generic.type == X_Reply || reply->generic.type == GenericEvent)
 	{
-		if (config.dumb)
-		{
-			char c[1];
-			if (!recvAll(&conn, c, 1)) goto done;
-			if (!sendAll(&conn, c, 1)) goto done;
-			continue;
-		}
-
-		if (!recvAll(&conn, buf, sz_xReply)) goto done;
-		size_t ofs = sz_xReply;
-		xReply* reply = (xReply*)buf;
-
-		if (reply->generic.type == X_Reply || reply->generic.type == GenericEvent)
-		{
-			size_t dataLength = reply->generic.length * 4;
-			bufSize(&buf, &bufLen, ofs + dataLength);
-			reply = (xReply*)buf; // in case bufSize moved buf
-			if (!recvAll(&conn, buf+ofs, dataLength)) goto done;
-			ofs += dataLength;
-		}
-		log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%d\n",
-			data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
-
-		switch (reply->generic.type)
-		{
-			case X_Error:
-			{
-				xError* err = (xError*)buf;
-				log_debug2(" [%d] Error - code=%d resourceID=0x%x minorCode=%d majorCode=%d (%s)\n",
-					data->index, err->errorCode, err->resourceID, err->minorCode, err->majorCode, requestNames[err->majorCode]);
-				break;
-			}
-
-			case X_Reply:
-			{
-				switch (data->notes[reply->generic.sequenceNumber])
-				{
-					case Note_X_GetGeometry:
-					{
-						xGetGeometryReply* reply = (xGetGeometryReply*)buf;
-						log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
-						fixCoords(&reply->x, &reply->y, &reply->width, &reply->height);
-						log_debug2("  ->          (%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
-						break;
-					}
-
-					case Note_X_GetInputFocus:
-					{
-						if (data->doMouseGrab)
-						{
-							xGetInputFocusReply* reply = (xGetInputFocusReply*)buf;
-							log_debug2("  XGetInputFocus(0x%x, %d)\n", reply->focus, reply->revertTo);
-
-							log_debug("Acquiring mouse grab\n");
-
-							xGrabPointerReq req;
-							req.reqType = X_GrabPointer;
-							req.ownerEvents = true; // ?
-							req.length = sizeof(req)/4;
-							req.grabWindow = reply->focus;
-							req.eventMask = ~0xFFFF8003;
-							req.pointerMode = 1 /* Asynchronous */;
-							req.keyboardMode = 1 /* Asynchronous */;
-							req.confineTo = reply->focus;
-							req.cursor = None;
-							req.time = CurrentTime;
-							injectRequest(data, &req, sizeof(req));
-
-							data->doMouseGrab = false;
-						}
-						break;
-					}
-
-					case Note_X_InternAtom_Other:
-					{
-						xInternAtomReply* reply = (xInternAtomReply*)buf;
-						log_debug2("  X_InternAtom: atom=%d\n", reply->atom);
-						break;
-					}
-
-					case Note_X_QueryExtension_XFree86_VidModeExtension:
-					{
-						xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
-						log_debug2("  X_QueryExtension (XFree86-VidModeExtension): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-							reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-						if (reply->present)
-							data->opcode_XFree86_VidModeExtension = reply->major_opcode;
-						break;
-					}
-
-					case Note_X_QueryExtension_RANDR:
-					{
-						xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
-						log_debug2("  X_QueryExtension (RANDR): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-							reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-						if (reply->present)
-							data->opcode_RANDR = reply->major_opcode;
-						break;
-					}
-
-					case Note_X_QueryExtension_Xinerama:
-					{
-						xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
-						log_debug2("  X_QueryExtension (XINERAMA): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-							reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-						if (reply->present)
-							data->opcode_Xinerama = reply->major_opcode;
-						break;
-					}
-
-					case Note_X_QueryExtension_NV_GLX:
-					{
-						xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
-						log_debug2("  X_QueryExtension (NV-GLX): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-							reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-						if (reply->present)
-							data->opcode_NV_GLX = reply->major_opcode;
-						break;
-					}
-
-					case Note_X_QueryExtension_Other:
-					{
-						xQueryExtensionReply* reply = (xQueryExtensionReply*)buf;
-						log_debug2("  X_QueryExtension: present=%d major_opcode=%d first_event=%d first_error=%d\n",
-							reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-						break;
-					}
-
-					case Note_X_XF86VidModeGetModeLine:
-					{
-						xXF86VidModeGetModeLineReply* reply = (xXF86VidModeGetModeLineReply*)buf;
-						log_debug2("  X_XF86VidModeGetModeLine(%d x %d)\n", reply->hdisplay, reply->vdisplay);
-						fixSize(&reply->hdisplay, &reply->vdisplay);
-						log_debug2("  ->                      (%d x %d)\n", reply->hdisplay, reply->vdisplay);
-						break;
-					}
-
-					case Note_X_XF86VidModeGetAllModeLines:
-					{
-						xXF86VidModeGetAllModeLinesReply* reply = (xXF86VidModeGetAllModeLinesReply*)buf;
-						xXF86VidModeModeInfo* modeInfos = (xXF86VidModeModeInfo*)(buf + sz_xXF86VidModeGetAllModeLinesReply);
-						for (size_t i=0; i<reply->modecount; i++)
-						{
-							xXF86VidModeModeInfo* modeInfo = modeInfos + i;
-							log_debug2("  X_XF86VidModeGetAllModeLines[%d] = %d x %d\n", i, modeInfo->hdisplay, modeInfo->vdisplay);
-							fixSize(&modeInfo->hdisplay, &modeInfo->vdisplay);
-							log_debug2("  ->                                %d x %d\n",    modeInfo->hdisplay, modeInfo->vdisplay);
-						}
-						break;
-					}
-
-					case Note_X_RRGetScreenInfo:
-					{
-						xRRGetScreenInfoReply* reply = (xRRGetScreenInfoReply*)buf;
-						xScreenSizes* sizes = (xScreenSizes*)(buf+sz_xRRGetScreenInfoReply);
-						for (size_t i=0; i<reply->nSizes; i++)
-						{
-							xScreenSizes* size = sizes+i;
-							log_debug2("  X_RRGetScreenInfo[%d] = %d x %d\n", i, size->widthInPixels, size->heightInPixels);
-							fixSize(&size->widthInPixels, &size->heightInPixels);
-							log_debug2("  ->                      %d x %d\n",    size->widthInPixels, size->heightInPixels);
-						}
-						break;
-					}
-
-					case Note_X_RRGetScreenResources:
-					{
-						xRRGetScreenResourcesReply* reply = (xRRGetScreenResourcesReply*)buf;
-						void* ptr = buf+sz_xRRGetScreenResourcesReply;
-						ptr += reply->nCrtcs * sizeof(CARD32);
-						ptr += reply->nOutputs * sizeof(CARD32);
-						for (size_t i=0; i<reply->nModes; i++)
-						{
-							xRRModeInfo* modeInfo = (xRRModeInfo*)ptr;
-							log_debug2("  X_RRGetScreenResources[%d] = %d x %d\n", i, modeInfo->width, modeInfo->height);
-							fixSize(&modeInfo->width, &modeInfo->height);
-							log_debug2("  ->                           %d x %d\n",    modeInfo->width, modeInfo->height);
-							ptr += sz_xRRModeInfo;
-						}
-						break;
-					}
-
-					case Note_X_RRGetCrtcInfo:
-					{
-						xRRGetCrtcInfoReply* reply = (xRRGetCrtcInfoReply*)buf;
-						log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
-						if (reply->mode != None)
-						{
-							fixMonitor(&reply->x, &reply->y, &reply->width, &reply->height);
-							if (!reply->width || !reply->height)
-							{
-								reply->x = reply->y = reply->width = reply->height = 0;
-								reply->mode = None;
-								reply->rotation = reply->rotations = RR_Rotate_0;
-								reply->nOutput = reply->nPossibleOutput = 0;
-							}
-						}
-						log_debug2("  ->                %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
-						break;
-					}
-
-					case Note_X_XineramaQueryScreens:
-					{
-						xXineramaQueryScreensReply* reply = (xXineramaQueryScreensReply*)buf;
-						xXineramaScreenInfo* screens = (xXineramaScreenInfo*)(buf+sz_XineramaQueryScreensReply);
-						for (size_t i=0; i<reply->number; i++)
-						{
-							xXineramaScreenInfo* screen = screens+i;
-							log_debug2("  X_XineramaQueryScreens[%d] = %dx%d @ %dx%d\n", i, screen->width, screen->height, screen->x_org, screen->y_org);
-							fixCoords(&screen->x_org, &screen->y_org, &screen->width, &screen->height);
-							log_debug2("  ->                           %dx%d @ %dx%d\n",    screen->width, screen->height, screen->x_org, screen->y_org);
-						}
-						break;
-					}
-
-					case Note_NV_GLX:
-					{
-#if 0
-						char fn[256];
-						static int counter = 0;
-						sprintf(fn, "/tmp/hax11-NV-%d-rsp-%d", reply->generic.sequenceNumber, counter++);
-						FILE* f = fopen(fn, "wb");
-						fwrite(buf, 1, ofs, f);
-						fclose(f);
-#endif
-						break;
-					}
-				}
-				break;
-			}
-
-			case FocusIn:
-				if (config.confineMouse)
-				{
-					if (!data->doMouseGrab)
-					{
-						xReq req;
-						req.reqType = X_GetInputFocus;
-						req.length = sizeof(req)/4;
-						CARD16 sequenceNumber = injectRequest(data, &req, sizeof(req));
-						data->notes[sequenceNumber] = Note_X_GetInputFocus;
-
-						data->doMouseGrab = true;
-					}
-				}
-				break;
-
-			case FocusOut:
-				if (config.confineMouse)
-				{
-					log_debug("Releasing mouse grab\n");
-
-					xResourceReq req;
-					req.reqType = X_UngrabPointer;
-					req.length = sizeof(req)/4;
-					req.id = CurrentTime;
-					injectRequest(data, &req, sizeof(req));
-
-					data->doMouseGrab = false;
-				}
-
-				if (config.filterFocus)
-				{
-					log_debug("Filtering out FocusOut event\n");
-					continue;
-				}
-				break;
-		}
-
-		if (config.debug >= 2 && config.actualX && config.actualY && memmem(buf, ofs, &config.actualX, 2) && memmem(buf, ofs, &config.actualY, 2))
-			log_debug2("   Found actualW/H in output! ----------------------------------------------------------------------------------------------\n");
-
-		while (data->serialLast != reply->generic.sequenceNumber)
-		{
-			data->skip[data->serialLast] = false;
-			data->serialLast++;
-			if (data->skip[data->serialLast])
-			{
-				data->serialDelta++;
-				log_debug2("  Incrementing serialDelta for injected reply (now at %d)\n", data->serialDelta);
-			}
-		}
-
-		if (reply->generic.type < 2 && // reply or error only, not event
-			data->skip[reply->generic.sequenceNumber])
-		{
-			log_debug2("  Skipping this reply\n");
-			continue;
-		}
-
-		reply->generic.sequenceNumber -= data->serialDelta;
-
-		if (!sendAll(&conn, buf, ofs)) goto done;
+		size_t dataLength = reply->generic.length * 4;
+		bufSize(&data->buf, &data->bufLen, ofs + dataLength);
+		reply = (xReply*)data->buf; // in case bufSize moved buf
+		if (!recvAll(&conn, data->buf+ofs, dataLength)) return false;
+		ofs += dataLength;
 	}
-done:
-	log_debug("Exiting write thread.\n");
-	data->exiting = 1;
+	log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%d\n",
+		data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
+
+	switch (reply->generic.type)
+	{
+		case X_Error:
+		{
+			xError* err = (xError*)data->buf;
+			log_debug2(" [%d] Error - code=%d resourceID=0x%x minorCode=%d majorCode=%d (%s)\n",
+				data->index, err->errorCode, err->resourceID, err->minorCode, err->majorCode, requestNames[err->majorCode]);
+			break;
+		}
+
+		case X_Reply:
+		{
+			switch (data->notes[reply->generic.sequenceNumber])
+			{
+				case Note_X_GetGeometry:
+				{
+					xGetGeometryReply* reply = (xGetGeometryReply*)data->buf;
+					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
+					fixCoords(&reply->x, &reply->y, &reply->width, &reply->height);
+					log_debug2("  ->          (%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
+					break;
+				}
+
+				case Note_X_GetInputFocus:
+				{
+					if (data->doMouseGrab)
+					{
+						xGetInputFocusReply* reply = (xGetInputFocusReply*)data->buf;
+						log_debug2("  XGetInputFocus(0x%x, %d)\n", reply->focus, reply->revertTo);
+
+						log_debug("Acquiring mouse grab\n");
+
+						xGrabPointerReq req;
+						req.reqType = X_GrabPointer;
+						req.ownerEvents = true; // ?
+						req.length = sizeof(req)/4;
+						req.grabWindow = reply->focus;
+						req.eventMask = ~0xFFFF8003;
+						req.pointerMode = 1 /* Asynchronous */;
+						req.keyboardMode = 1 /* Asynchronous */;
+						req.confineTo = reply->focus;
+						req.cursor = None;
+						req.time = CurrentTime;
+						injectRequest(data, &req, sizeof(req));
+
+						data->doMouseGrab = false;
+					}
+					break;
+				}
+
+				case Note_X_InternAtom_Other:
+				{
+					xInternAtomReply* reply = (xInternAtomReply*)data->buf;
+					log_debug2("  X_InternAtom: atom=%d\n", reply->atom);
+					break;
+				}
+
+				case Note_X_QueryExtension_XFree86_VidModeExtension:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					log_debug2("  X_QueryExtension (XFree86-VidModeExtension): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_XFree86_VidModeExtension = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_RANDR:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					log_debug2("  X_QueryExtension (RANDR): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_RANDR = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_Xinerama:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					log_debug2("  X_QueryExtension (XINERAMA): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_Xinerama = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_NV_GLX:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					log_debug2("  X_QueryExtension (NV-GLX): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					if (reply->present)
+						data->opcode_NV_GLX = reply->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_Other:
+				{
+					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					log_debug2("  X_QueryExtension: present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+					break;
+				}
+
+				case Note_X_XF86VidModeGetModeLine:
+				{
+					xXF86VidModeGetModeLineReply* reply = (xXF86VidModeGetModeLineReply*)data->buf;
+					log_debug2("  X_XF86VidModeGetModeLine(%d x %d)\n", reply->hdisplay, reply->vdisplay);
+					fixSize(&reply->hdisplay, &reply->vdisplay);
+					log_debug2("  ->                      (%d x %d)\n", reply->hdisplay, reply->vdisplay);
+					break;
+				}
+
+				case Note_X_XF86VidModeGetAllModeLines:
+				{
+					xXF86VidModeGetAllModeLinesReply* reply = (xXF86VidModeGetAllModeLinesReply*)data->buf;
+					xXF86VidModeModeInfo* modeInfos = (xXF86VidModeModeInfo*)(data->buf + sz_xXF86VidModeGetAllModeLinesReply);
+					for (size_t i=0; i<reply->modecount; i++)
+					{
+						xXF86VidModeModeInfo* modeInfo = modeInfos + i;
+						log_debug2("  X_XF86VidModeGetAllModeLines[%d] = %d x %d\n", i, modeInfo->hdisplay, modeInfo->vdisplay);
+						fixSize(&modeInfo->hdisplay, &modeInfo->vdisplay);
+						log_debug2("  ->                                %d x %d\n",    modeInfo->hdisplay, modeInfo->vdisplay);
+					}
+					break;
+				}
+
+				case Note_X_RRGetScreenInfo:
+				{
+					xRRGetScreenInfoReply* reply = (xRRGetScreenInfoReply*)data->buf;
+					xScreenSizes* sizes = (xScreenSizes*)(data->buf+sz_xRRGetScreenInfoReply);
+					for (size_t i=0; i<reply->nSizes; i++)
+					{
+						xScreenSizes* size = sizes+i;
+						log_debug2("  X_RRGetScreenInfo[%d] = %d x %d\n", i, size->widthInPixels, size->heightInPixels);
+						fixSize(&size->widthInPixels, &size->heightInPixels);
+						log_debug2("  ->                      %d x %d\n",    size->widthInPixels, size->heightInPixels);
+					}
+					break;
+				}
+
+				case Note_X_RRGetScreenResources:
+				{
+					xRRGetScreenResourcesReply* reply = (xRRGetScreenResourcesReply*)data->buf;
+					void* ptr = data->buf+sz_xRRGetScreenResourcesReply;
+					ptr += reply->nCrtcs * sizeof(CARD32);
+					ptr += reply->nOutputs * sizeof(CARD32);
+					for (size_t i=0; i<reply->nModes; i++)
+					{
+						xRRModeInfo* modeInfo = (xRRModeInfo*)ptr;
+						log_debug2("  X_RRGetScreenResources[%d] = %d x %d\n", i, modeInfo->width, modeInfo->height);
+						fixSize(&modeInfo->width, &modeInfo->height);
+						log_debug2("  ->                           %d x %d\n",    modeInfo->width, modeInfo->height);
+						ptr += sz_xRRModeInfo;
+					}
+					break;
+				}
+
+				case Note_X_RRGetCrtcInfo:
+				{
+					xRRGetCrtcInfoReply* reply = (xRRGetCrtcInfoReply*)data->buf;
+					log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
+					if (reply->mode != None)
+					{
+						fixMonitor(&reply->x, &reply->y, &reply->width, &reply->height);
+						if (!reply->width || !reply->height)
+						{
+							reply->x = reply->y = reply->width = reply->height = 0;
+							reply->mode = None;
+							reply->rotation = reply->rotations = RR_Rotate_0;
+							reply->nOutput = reply->nPossibleOutput = 0;
+						}
+					}
+					log_debug2("  ->                %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
+					break;
+				}
+
+				case Note_X_XineramaQueryScreens:
+				{
+					xXineramaQueryScreensReply* reply = (xXineramaQueryScreensReply*)data->buf;
+					xXineramaScreenInfo* screens = (xXineramaScreenInfo*)(data->buf+sz_XineramaQueryScreensReply);
+					for (size_t i=0; i<reply->number; i++)
+					{
+						xXineramaScreenInfo* screen = screens+i;
+						log_debug2("  X_XineramaQueryScreens[%d] = %dx%d @ %dx%d\n", i, screen->width, screen->height, screen->x_org, screen->y_org);
+						fixCoords(&screen->x_org, &screen->y_org, &screen->width, &screen->height);
+						log_debug2("  ->                           %dx%d @ %dx%d\n",    screen->width, screen->height, screen->x_org, screen->y_org);
+					}
+					break;
+				}
+
+				case Note_NV_GLX:
+				{
+#if 0
+					char fn[256];
+					static int counter = 0;
+					sprintf(fn, "/tmp/hax11-NV-%d-rsp-%d", reply->generic.sequenceNumber, counter++);
+					FILE* f = fopen(fn, "wb");
+					fwrite(data->buf, 1, ofs, f);
+					fclose(f);
+#endif
+					break;
+				}
+			}
+			break;
+		}
+
+		case FocusIn:
+			if (config.confineMouse)
+			{
+				if (!data->doMouseGrab)
+				{
+					xReq req;
+					req.reqType = X_GetInputFocus;
+					req.length = sizeof(req)/4;
+					CARD16 sequenceNumber = injectRequest(data, &req, sizeof(req));
+					data->notes[sequenceNumber] = Note_X_GetInputFocus;
+
+					data->doMouseGrab = true;
+				}
+			}
+			break;
+
+		case FocusOut:
+			if (config.confineMouse)
+			{
+				log_debug("Releasing mouse grab\n");
+
+				xResourceReq req;
+				req.reqType = X_UngrabPointer;
+				req.length = sizeof(req)/4;
+				req.id = CurrentTime;
+				injectRequest(data, &req, sizeof(req));
+
+				data->doMouseGrab = false;
+			}
+
+			if (config.filterFocus)
+			{
+				log_debug("Filtering out FocusOut event\n");
+				return true;
+			}
+			break;
+	}
+
+	if (config.debug >= 2 && config.actualX && config.actualY && memmem(data->buf, ofs, &config.actualX, 2) && memmem(data->buf, ofs, &config.actualY, 2))
+		log_debug2("   Found actualW/H in output! ----------------------------------------------------------------------------------------------\n");
+
+	while (data->serialLast != reply->generic.sequenceNumber)
+	{
+		data->skip[data->serialLast] = false;
+		data->serialLast++;
+		if (data->skip[data->serialLast])
+		{
+			data->serialDelta++;
+			log_debug2("  Incrementing serialDelta for injected reply (now at %d)\n", data->serialDelta);
+		}
+	}
+
+	if (reply->generic.type < 2 && // reply or error only, not event
+		data->skip[reply->generic.sequenceNumber])
+	{
+		log_debug2("  Skipping this reply\n");
+		return true;
+	}
+
+	reply->generic.sequenceNumber -= data->serialDelta;
+
+	if (!sendAll(&conn, data->buf, ofs)) return false;
+
+	return true;
+}
+
+static void* workThreadProc(void* dataPtr)
+{
+	X11ConnData* data = (X11ConnData*)dataPtr;
+
+	bufSize(&data->buf, &data->bufLen, 1<<16);
+
+	fd_set readSet, errorSet;
+	FD_ZERO(&readSet);
+	FD_ZERO(&errorSet);
+
+	if (data->server >= FD_SETSIZE || data->client >= FD_SETSIZE)
+	{
+		log_error("Too many file descriptors for FD_SETSIZE!");
+		return NULL;
+	}
+
+	while (true)
+    {
+	    FD_SET(data->client, &readSet );
+	    FD_SET(data->server, &readSet );
+	    FD_SET(data->client, &errorSet);
+	    FD_SET(data->server, &errorSet);
+
+	    if (select(FD_SETSIZE, &readSet, NULL, &errorSet, NULL) < 0)
+	    {
+		    log_error("select() failed");
+		    break;
+	    }
+
+	    if (FD_ISSET (data->client, &errorSet))
+	    {
+		    log_debug("Error on client socket");
+		    break;
+	    }
+	    if (FD_ISSET (data->server, &errorSet))
+	    {
+		    log_debug("Error on server socket");
+		    break;
+	    }
+
+	    if (FD_ISSET (data->client, &readSet))
+		    if (!handleClientData(data))
+			    break;
+	    if (FD_ISSET (data->server, &readSet))
+		    if (!handleServerData(data))
+			    break;
+    }
+
+	log_debug("Exiting work thread.\n");
 	shutdown(data->client, SHUT_RDWR);
 	shutdown(data->server, SHUT_RDWR);
 	close(data->client);
@@ -1333,24 +1382,18 @@ int connect(int socket, const struct sockaddr *address,
 						NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
 					}
 
-					pthread_t readThread, writeThread;
+					pthread_t workThread;
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
-						(& readThread, &attr, x11connThreadReadProc, data);
-					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
-						(&writeThread, NULL, x11connThreadWriteProc, data);
+						(& workThread, &attr, workThreadProc, data);
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_destroy)(&attr);
 
 					if (config.fork)
 					{
-						log_debug("Joining read thread...\n");
-						NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)( readThread, NULL);
-						// log_debug("Joining write thread...\n");
-						// NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)(writeThread, NULL);
+						log_debug("Joining work thread...\n");
+						NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)(workThread, NULL);
 						log_debug("Fork is exiting.\n");
 						NEXT(pthread, "/usr/lib/libpthread.so", pthread_exit)(0);
-						log_debug("I said, fork is exiting.\n");
 						exit(0);
-						log_debug("WTF?\n");
 					}
 				}
 			}

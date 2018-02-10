@@ -211,22 +211,27 @@ static void needConfig()
 
 // ****************************************************************************
 
-#define NEXT(handle, path, func) ({								\
-			static typeof(&func) pfunc = NULL;					\
-			if (!pfunc)											\
-				pfunc = (typeof(&func))dlsym(RTLD_NEXT, #func);	\
-			if (!pfunc) {										\
-				if (!handle) {									\
-					handle = dlopen(path, RTLD_LAZY);			\
-				}												\
-				if (!handle) {									\
-					log_error("hax11: Ack, dlopen failed!\n");	\
-				}												\
-				pfunc = (typeof(&func))dlsym(handle, #func);	\
-			}													\
-			if (!pfunc)											\
-				log_error("hax11: Ack, dlsym failed!\n");		\
-			pfunc;												\
+#define NEXT(handle, path, func) ({                                      \
+			static typeof(&func) pfunc = NULL;                           \
+			if (!pfunc)                                                  \
+				pfunc = (typeof(&func))dlsym(RTLD_NEXT, #func);          \
+			if (!pfunc) {                                                \
+				if (!handle) {                                           \
+					handle = dlopen(path, RTLD_LAZY);                    \
+				}                                                        \
+				if (!handle) {                                           \
+					needConfig();                                        \
+					log_error("Ack, dlopen of '%s' failed: %s\n",        \
+						path, dlerror());                                \
+				}                                                        \
+				pfunc = (typeof(&func))dlsym(handle, #func);             \
+			}                                                            \
+			if (!pfunc) {                                                \
+				needConfig();                                            \
+				log_error("Ack, dlsym of '%s' (from '%s') failed: %s\n", \
+					#func, path, dlerror());                             \
+			}                                                            \
+			pfunc;                                                       \
 		})
 
 static void fixSize(

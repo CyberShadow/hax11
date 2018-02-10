@@ -83,6 +83,7 @@ struct Config
 	char filterFocus;
 	char noMouseGrab;
 	char noKeyboardGrab;
+	char noPrimarySelection;
 	char dumb; // undocumented - act as a dumb pipe, nothing more
 	char confineMouse;
 };
@@ -161,6 +162,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(filterFocus)
 		PARSE_INT(noMouseGrab)
 		PARSE_INT(noKeyboardGrab)
+		PARSE_INT(noPrimarySelection)
 		PARSE_INT(dumb)
 		PARSE_INT(confineMouse)
 
@@ -840,6 +842,40 @@ static bool handleClientData(X11ConnData* data)
 				req->time = -1;
 			}
 			break;
+
+		case X_GetSelectionOwner:
+		{
+			xResourceReq* req = (xResourceReq*)data->buf;
+			log_debug(" Selection atom: %d\n", req->id);
+			if (config.noPrimarySelection && req->id == XA_PRIMARY)
+			{
+				req->id = XA_CUT_BUFFER0;
+				log_debug(" -> Replaced atom: %d\n", req->id);
+			}
+			break;
+		}
+		case X_SetSelectionOwner:
+		{
+			xSetSelectionOwnerReq* req = (xSetSelectionOwnerReq*)data->buf;
+			log_debug(" Selection atom: %d\n", req->selection);
+			if (config.noPrimarySelection && req->selection == XA_PRIMARY)
+			{
+				req->selection = XA_CUT_BUFFER1;
+				log_debug(" -> Replaced atom: %d\n", req->selection);
+			}
+			break;
+		}
+		case X_ConvertSelection:
+		{
+			xConvertSelectionReq* req = (xConvertSelectionReq*)data->buf;
+			log_debug(" Selection atom: %d\n", req->selection);
+			if (config.noPrimarySelection && req->selection == XA_PRIMARY)
+			{
+				req->selection = XA_CUT_BUFFER2;
+				log_debug(" -> Replaced atom: %d\n", req->selection);
+			}
+			break;
+		}
 
 		case 0:
 			break;

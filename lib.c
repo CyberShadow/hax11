@@ -1437,7 +1437,7 @@ int connect(int socket, const struct sockaddr *address,
 						}
 					}
 
-					pthread_attr_t attr;
+					pthread_attr_t attr = {};
 					CHECKRET(NEXT(pthread, LIBPTHREAD_SO, pthread_attr_init)(&attr),
 						ret == 0, ret, "pthread_attr_init");
 					CHECKRET(NEXT(pthread, LIBPTHREAD_SO, pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED),

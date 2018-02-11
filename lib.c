@@ -1332,6 +1332,21 @@ static void* workThreadProc(void* dataPtr)
 	return NULL;
 }
 
+static void fail(int err, const char* func)
+{
+	log_debug("%s failed (%d / %s)!\n",
+		func, err, strerror(err));
+	exit(1);
+}
+
+#define CHECKRET(expr, cond, err, func) ({ \
+			int ret = (expr);              \
+			if (!(cond))                   \
+				fail((err), (func));       \
+			ret;						   \
+		})
+
+
 static void* libc = NULL;
 static void* pthread = NULL;
 
@@ -1339,13 +1354,14 @@ static void* pthread = NULL;
 #include <pthread.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 int connect(int socket, const struct sockaddr *address,
 	socklen_t address_len)
 {
-	int result = NEXT(libc, LIBC_SO, connect)
+	int connect_result = NEXT(libc, LIBC_SO, connect)
 		(socket, address, address_len);
-	if (result == 0)
+	if (connect_result == 0)
 	{
 		if (address->sa_family == AF_UNIX)
 		{
@@ -1363,40 +1379,47 @@ int connect(int socket, const struct sockaddr *address,
 					log_debug("Intercepting X connection!\n");
 
 					int pair[2];
-					socketpair(AF_UNIX, SOCK_STREAM, 0, pair);
+					CHECKRET(socketpair(AF_UNIX, SOCK_STREAM, 0, pair),
+						ret == 0, ret, "socketpair");
 
 					X11ConnData* data = calloc(1, sizeof(X11ConnData));
 					static int index = 0;
 					data->index = index++;
 					data->server = dup(socket);
 					data->client = pair[0];
-					dup2(pair[1], socket);
-					close(pair[1]);
+					CHECKRET(dup2(pair[1], socket),
+						ret >= 0, errno, "dup2");
+					CHECKRET(close(pair[1]),
+						ret == 0, errno, "close");
 
 					if (config.fork)
 					{
 						log_debug("Forking...\n");
 
 						pid_t pid = fork();
+						CHECKRET(pid, ret >= 0, errno, "fork");
 						if (pid == 0)
 						{
 							log_debug("In child, forking again\n");
 							pid = getpid();
 							pid_t pid2 = fork();
+							CHECKRET(pid2, ret >= 0, errno, "fork");
 							if (pid2)
 							{
 								log_debug("Second fork is %d\n", pid2);
 								exit(0);
 							}
 							log_debug("In child, double-fork OK\n");
-							waitpid(pid, NULL, 0);
+							CHECKRET(waitpid(pid, NULL, 0),
+								ret >= 0, errno, "waitpid");
 							log_debug("Parent exited, proceeding\n");
 							struct rlimit r;
-							getrlimit(RLIMIT_NOFILE, &r);
+							CHECKRET(getrlimit(RLIMIT_NOFILE, &r),
+								ret >= 0, errno, "getrlimit");
 
 							for (int n=3; n<(int)r.rlim_cur; n++)
 								if (n != data->server && n != data->client)
-									close(n);
+									close(n); // Ignore error
 
 							log_debug("Running main loop.\n");
 							workThreadProc(data);
@@ -1413,8 +1436,9 @@ int connect(int socket, const struct sockaddr *address,
 							if (pid > 0)
 							{
 								log_debug("In parent! Child is %d\n", pid);
-								waitpid(pid, NULL, 0);
-								return result;
+								CHECKRET(waitpid(pid, NULL, 0),
+									ret >= 0, errno, "waitpid");
+								return connect_result;
 							}
 							else
 							{
@@ -1425,16 +1449,19 @@ int connect(int socket, const struct sockaddr *address,
 					}
 
 					pthread_attr_t attr;
-					NEXT(pthread, LIBPTHREAD_SO, pthread_attr_init)(&attr);
-					NEXT(pthread, LIBPTHREAD_SO, pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
+					CHECKRET(NEXT(pthread, LIBPTHREAD_SO, pthread_attr_init)(&attr),
+						ret == 0, ret, "pthread_attr_init");
+					CHECKRET(NEXT(pthread, LIBPTHREAD_SO, pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED),
+						ret == 0, ret, "pthread_attr_setdetachstate");
 
 					pthread_t workThread;
-					NEXT(pthread, LIBPTHREAD_SO, pthread_create)
-						(& workThread, &attr, workThreadProc, data);
+					CHECKRET(NEXT(pthread, LIBPTHREAD_SO, pthread_create)
+						(&workThread, &attr, workThreadProc, data),
+						ret == 0, ret, "pthread_create");
 					NEXT(pthread, LIBPTHREAD_SO, pthread_attr_destroy)(&attr);
 				}
 			}
 		}
 	}
-	return result;
+	return connect_result;
 }

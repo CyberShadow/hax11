@@ -1395,6 +1395,12 @@ int connect(int socket, const struct sockaddr *address,
 							for (int n=3; n<(int)r.rlim_cur; n++)
 								if (n != data->server && n != data->client)
 									close(n);
+
+							log_debug("Running main loop.\n");
+							workThreadProc(data);
+
+							log_debug("Fork is exiting.\n");
+							exit(0);
 						}
 						else
 						{
@@ -1427,15 +1433,6 @@ int connect(int socket, const struct sockaddr *address,
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
 						(& workThread, &attr, workThreadProc, data);
 					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_destroy)(&attr);
-
-					if (config.fork)
-					{
-						log_debug("Joining work thread...\n");
-						NEXT(pthread, "/usr/lib/libpthread.so", pthread_join)(workThread, NULL);
-						log_debug("Fork is exiting.\n");
-						NEXT(pthread, "/usr/lib/libpthread.so", pthread_exit)(0);
-						exit(0);
-					}
 				}
 			}
 		}

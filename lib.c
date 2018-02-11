@@ -1334,7 +1334,7 @@ static void* workThreadProc(void* dataPtr)
 
 static void fail(int err, const char* func)
 {
-	log_debug("%s failed (%d / %s)!\n",
+	log_error("%s failed (%d / %s)!\n",
 		func, err, strerror(err));
 	exit(1);
 }

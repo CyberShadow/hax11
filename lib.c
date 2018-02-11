@@ -1426,10 +1426,7 @@ int connect(int socket, const struct sockaddr *address,
 
 					pthread_attr_t attr;
 					NEXT(pthread, LIBPTHREAD_SO, pthread_attr_init)(&attr);
-					if (!config.fork)
-					{
-						NEXT(pthread, LIBPTHREAD_SO, pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
-					}
+					NEXT(pthread, LIBPTHREAD_SO, pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
 
 					pthread_t workThread;
 					NEXT(pthread, LIBPTHREAD_SO, pthread_create)

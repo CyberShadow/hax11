@@ -1433,18 +1433,10 @@ int connect(int socket, const struct sockaddr *address,
 							close(data->client);
 							free(data);
 
-							if (pid > 0)
-							{
-								log_debug("In parent! Child is %d\n", pid);
-								CHECKRET(waitpid(pid, NULL, 0),
-									ret >= 0, errno, "waitpid");
-								return connect_result;
-							}
-							else
-							{
-								log_debug("Fork failed!\n");
-								return pid;
-							}
+							log_debug("In parent! Child is %d\n", pid);
+							CHECKRET(waitpid(pid, NULL, 0),
+								ret >= 0, errno, "waitpid");
+							return connect_result;
 						}
 					}
 

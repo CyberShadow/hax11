@@ -12,6 +12,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include <gnu/lib-names.h>
+
 #include <X11/Xproto.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
@@ -1341,7 +1343,7 @@ static void* pthread = NULL;
 int connect(int socket, const struct sockaddr *address,
 	socklen_t address_len)
 {
-	int result = NEXT(libc, "/usr/lib/libc.so", connect)
+	int result = NEXT(libc, LIBC_SO, connect)
 		(socket, address, address_len);
 	if (result == 0)
 	{
@@ -1423,16 +1425,16 @@ int connect(int socket, const struct sockaddr *address,
 					}
 
 					pthread_attr_t attr;
-					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_init)(&attr);
+					NEXT(pthread, LIBPTHREAD_SO, pthread_attr_init)(&attr);
 					if (!config.fork)
 					{
-						NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
+						NEXT(pthread, LIBPTHREAD_SO, pthread_attr_setdetachstate)(&attr, PTHREAD_CREATE_DETACHED);
 					}
 
 					pthread_t workThread;
-					NEXT(pthread, "/usr/lib/libpthread.so", pthread_create)
+					NEXT(pthread, LIBPTHREAD_SO, pthread_create)
 						(& workThread, &attr, workThreadProc, data);
-					NEXT(pthread, "/usr/lib/libpthread.so", pthread_attr_destroy)(&attr);
+					NEXT(pthread, LIBPTHREAD_SO, pthread_attr_destroy)(&attr);
 				}
 			}
 		}

@@ -1400,8 +1400,8 @@ int connect(int socket, const struct sockaddr *address,
 						CHECKRET(pid, ret >= 0, errno, "fork");
 						if (pid == 0)
 						{
-							log_debug("In child, forking again\n");
 							pid = getpid();
+							log_debug("In child (%d), forking again\n", pid);
 							pid_t pid2 = fork();
 							CHECKRET(pid2, ret >= 0, errno, "fork");
 							if (pid2)
@@ -1410,9 +1410,6 @@ int connect(int socket, const struct sockaddr *address,
 								exit(0);
 							}
 							log_debug("In child, double-fork OK\n");
-							CHECKRET(waitpid(pid, NULL, 0),
-								ret >= 0, errno, "waitpid");
-							log_debug("Parent exited, proceeding\n");
 							struct rlimit r;
 							CHECKRET(getrlimit(RLIMIT_NOFILE, &r),
 								ret >= 0, errno, "getrlimit");

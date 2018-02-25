@@ -1,5 +1,14 @@
 #include "common.c"
 
+static void getProfileName(char *p, size_t size)
+{
+	readlink("/proc/self/exe", p, size);
+	char *end = p + size;
+	// Remove leading '/', replace remaining '/' to '\'
+	for (; *p && p<end; p++)
+		p[0] = p[1] == '/' ? '\\' : p[1];
+}
+
 #include <sys/un.h>
 #include <pthread.h>
 #include <sys/resource.h>

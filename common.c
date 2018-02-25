@@ -179,6 +179,8 @@ static void readConfig(const char* fn)
 
 // ****************************************************************************
 
+static void getProfileName(char *buf, size_t size);
+
 static void needConfig()
 {
 	if (configLoaded)
@@ -203,11 +205,7 @@ static void needConfig()
 	strcpy(p, "/default");
 	readConfig(buf);
 
-	readlink("/proc/self/exe", p, sizeof(buf) - (p-buf));
-	p++;
-	for (; *p; p++)
-		if (*p == '/')
-			*p = '\\';
+	getProfileName(p + 1, sizeof(buf) - (p-buf));
 	readConfig(buf);
 }
 

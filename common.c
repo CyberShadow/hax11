@@ -247,7 +247,7 @@ static void fixCoords(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 	}
 }
 
-static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
+static bool fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 {
 	if (config.joinMST)
 	{
@@ -272,7 +272,9 @@ static void fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 
 	if (config.maskOtherMonitors)
 		if (*width != config.mainW || *height != config.mainH)
-			*x = *y = *width = *height = 0; // disable
+			return false;
+
+	return true;
 }
 
 static void hexDump(const void* buf, size_t len, char prefix1, char prefix2)
@@ -1142,8 +1144,7 @@ static bool handleServerData(X11ConnData* data)
 					log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
 					if (reply->mode != None)
 					{
-						fixMonitor(&reply->x, &reply->y, &reply->width, &reply->height);
-						if (!reply->width || !reply->height)
+						if (!fixMonitor(&reply->x, &reply->y, &reply->width, &reply->height))
 						{
 							reply->x = reply->y = reply->width = reply->height = 0;
 							reply->mode = None;

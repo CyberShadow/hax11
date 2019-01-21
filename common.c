@@ -292,6 +292,20 @@ static void hexDump(const void* buf, size_t len, char prefix1, char prefix2)
 			textptr += sprintf(textptr, " %02X", ((const unsigned char*)buf)[i]);
 		log_error("%c%c%s\n", prefix1, prefix2, textbuf);
 
+		/*
+		  Hex dump arrow legend:
+		  - Char 1:
+		    < - request (client (application) to server (Xorg))
+		    > - reply   (server (Xorg) to client (application))
+			{ - request (synthesized by hax11)
+			} - reply   (synthesized by hax11)
+		  - Char 2:
+		    - - data, incoming into hax11
+		    = - data, outgoing from hax11
+		    * - metadata, incoming into hax11
+		    % - metadata, outgoing from hax11
+		 */
+
 		buf += n;
 		len -= n;
 	}
@@ -631,7 +645,7 @@ static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 	struct Connection conn = {};
 	conn.recvfd = data->client;
 	conn.sendfd = data->server;
-	conn.dir = '<';
+	conn.dir = '{';
 
 	const xReq* req = (xReq*)buf;
 	sendAll(&conn, req, size);
@@ -639,6 +653,22 @@ static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 	data->skip[sequenceNumber] = true;
 	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
 	return sequenceNumber;
+}
+
+static CARD16 injectReply(X11ConnData *data, void* buf, size_t size)
+{
+	struct Connection conn = {};
+	conn.recvfd = data->server;
+	conn.sendfd = data->client;
+	conn.dir = '}';
+
+	xReply* reply = (xReply*)buf;
+	reply->generic.sequenceNumber = data->serial - data->serialDelta--;
+	reply->generic.length = ((size < sz_xReply ? sz_xReply : size) - sz_xReply + 3) / 4;
+	sendAll(&conn, reply, size);
+	log_debug2("[%d][%d] Injected reply %d (%s) with data %d, length %d\n",
+		data->index, reply->generic.sequenceNumber, reply->generic.type, responseNames[reply->generic.type], reply->generic.data1, size);
+	return reply->generic.sequenceNumber;
 }
 
 static bool handleClientData(X11ConnData* data)

@@ -88,6 +88,7 @@ struct Config
 	char noPrimarySelection;
 	char dumb; // undocumented - act as a dumb pipe, nothing more
 	char confineMouse;
+	char noResolutionChange;
 };
 
 static struct Config config = {};
@@ -167,6 +168,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(noPrimarySelection)
 		PARSE_INT(dumb)
 		PARSE_INT(confineMouse)
+		PARSE_INT(noResolutionChange)
 
 		/* else */
 			log_error("Unknown option: %s\n", buf);
@@ -916,6 +918,21 @@ static bool handleClientData(X11ConnData* data)
 				log_debug2(" RANDR - %d\n", req->data);
 				switch (req->data)
 				{
+					case X_RRSetScreenConfig:
+						if (config.noResolutionChange) // TODO: X_RRSetScreenSize, X_RRSetCrtcConfig
+						{
+							xRRSetScreenConfigReq* req = (xRRSetScreenConfigReq*)data->buf;
+						//	req->sizeID = -1;
+							xRRSetScreenConfigReply reply = {0};
+							reply.type = X_Reply;
+							reply.status = 0; // Success
+							reply.newTimestamp = req->timestamp;
+							reply.newConfigTimestamp = req->configTimestamp;
+							reply.root = req->drawable;
+							injectReply(data, &reply, sizeof(reply));
+							return true;
+						}
+						break;
 					case X_RRGetScreenInfo:
 						data->notes[sequenceNumber] = Note_X_RRGetScreenInfo;
 						break;

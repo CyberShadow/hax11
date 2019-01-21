@@ -10,7 +10,8 @@ Attempts to fix game and full-screen application issues on Linux, such as:
 
 It can also work around some common annoyances:
 - exclusively grabbing the mouse or keyboard
-- forcefully pausing the game when the window loses focus
+- forcibly pausing the game when the window loses focus
+- forcibly changing the screen resolution
 - not restricting the mouse cursor to its window/monitor
 
 ## Building

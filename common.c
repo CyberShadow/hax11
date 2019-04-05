@@ -198,7 +198,10 @@ static void needConfig()
 	config.desktopH = 2160;
 
 	char buf[1024] = {0};
-	strncpy(buf, getenv("HOME"), sizeof(buf)-100);
+	char *home = getenv("HOME");
+	if (!home)
+		return;
+	strncpy(buf, home, sizeof(buf)-100);
 	strcat(buf, "/.config"	); mkdir(buf, 0700); // TODO: XDG_CONFIG_HOME
 	strcat(buf, "/hax11"); mkdir(buf, 0700);
 	strcat(buf, "/profiles"	); mkdir(buf, 0700);

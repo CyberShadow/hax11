@@ -68,10 +68,10 @@ int connect(int socket, const struct sockaddr *address,
 			const char* path = ua->sun_path;
 			if (!*path)
 				path++;
-			needConfig();
-			log_debug("connect(%s,%d)\n", path, address_len);
+			//log_debug("connect(%s,%d)\n", path, address_len);
 			if (!strncmp(path, "/tmp/.X11-unix/X", 16))
 			{
+				needConfig();
 				log_debug("Found X connection!\n");
 				if (config.enable)
 				{

@@ -1054,7 +1054,7 @@ static bool handleServerData(X11ConnData* data)
 			{
 				case Note_X_GetGeometry:
 				{
-					xGetGeometryReply* r = (xGetGeometryReply*)data->buf;
+					xGetGeometryReply* r = &reply->geom;
 					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
 					fixCoords(&r->x, &r->y, &r->width, &r->height);
 					log_debug2("  ->          (%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
@@ -1065,7 +1065,7 @@ static bool handleServerData(X11ConnData* data)
 				{
 					if (data->doMouseGrab)
 					{
-						xGetInputFocusReply* r = (xGetInputFocusReply*)data->buf;
+						xGetInputFocusReply* r = &reply->inputFocus;
 						log_debug2("  XGetInputFocus(0x%x, %d)\n", r->focus, r->revertTo);
 
 						log_debug("Acquiring mouse grab\n");
@@ -1090,14 +1090,14 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_InternAtom_Other:
 				{
-					xInternAtomReply* r = (xInternAtomReply*)data->buf;
+					xInternAtomReply* r = &reply->atom;
 					log_debug2("  X_InternAtom: atom=%d\n", r->atom);
 					break;
 				}
 
 				case Note_X_QueryExtension_XFree86_VidModeExtension:
 				{
-					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = &reply->extension;
 					log_debug2("  X_QueryExtension (XFree86-VidModeExtension): present=%d major_opcode=%d first_event=%d first_error=%d\n",
 						r->present, r->major_opcode, r->first_event, r->first_error);
 					if (r->present)
@@ -1107,7 +1107,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_QueryExtension_RANDR:
 				{
-					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = &reply->extension;
 					log_debug2("  X_QueryExtension (RANDR): present=%d major_opcode=%d first_event=%d first_error=%d\n",
 						r->present, r->major_opcode, r->first_event, r->first_error);
 					if (r->present)
@@ -1117,7 +1117,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_QueryExtension_Xinerama:
 				{
-					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = &reply->extension;
 					log_debug2("  X_QueryExtension (XINERAMA): present=%d major_opcode=%d first_event=%d first_error=%d\n",
 						r->present, r->major_opcode, r->first_event, r->first_error);
 					if (r->present)
@@ -1127,7 +1127,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_QueryExtension_NV_GLX:
 				{
-					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = &reply->extension;
 					log_debug2("  X_QueryExtension (NV-GLX): present=%d major_opcode=%d first_event=%d first_error=%d\n",
 						r->present, r->major_opcode, r->first_event, r->first_error);
 					if (r->present)
@@ -1137,7 +1137,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_QueryExtension_Other:
 				{
-					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = &reply->extension;
 					log_debug2("  X_QueryExtension: present=%d major_opcode=%d first_event=%d first_error=%d\n",
 						r->present, r->major_opcode, r->first_event, r->first_error);
 					break;
@@ -1145,7 +1145,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_XF86VidModeGetModeLine:
 				{
-					xXF86VidModeGetModeLineReply* r = (xXF86VidModeGetModeLineReply*)data->buf;
+					xXF86VidModeGetModeLineReply* r = (xXF86VidModeGetModeLineReply*)reply;
 					log_debug2("  X_XF86VidModeGetModeLine(%d x %d)\n", r->hdisplay, r->vdisplay);
 					fixSize(&r->hdisplay, &r->vdisplay);
 					log_debug2("  ->                      (%d x %d)\n", r->hdisplay, r->vdisplay);
@@ -1154,7 +1154,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_XF86VidModeGetAllModeLines:
 				{
-					xXF86VidModeGetAllModeLinesReply* r = (xXF86VidModeGetAllModeLinesReply*)data->buf;
+					xXF86VidModeGetAllModeLinesReply* r = (xXF86VidModeGetAllModeLinesReply*)reply;
 					xXF86VidModeModeInfo* modeInfos = (xXF86VidModeModeInfo*)(data->buf + sz_xXF86VidModeGetAllModeLinesReply);
 					for (size_t i=0; i<r->modecount; i++)
 					{
@@ -1168,7 +1168,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_RRGetScreenInfo:
 				{
-					xRRGetScreenInfoReply* r = (xRRGetScreenInfoReply*)data->buf;
+					xRRGetScreenInfoReply* r = (xRRGetScreenInfoReply*)reply;
 					xScreenSizes* sizes = (xScreenSizes*)(data->buf+sz_xRRGetScreenInfoReply);
 					for (size_t i=0; i<r->nSizes; i++)
 					{
@@ -1182,7 +1182,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_RRGetScreenResources:
 				{
-					xRRGetScreenResourcesReply* r = (xRRGetScreenResourcesReply*)data->buf;
+					xRRGetScreenResourcesReply* r = (xRRGetScreenResourcesReply*)reply;
 					void* ptr = data->buf+sz_xRRGetScreenResourcesReply;
 					ptr += r->nCrtcs * sizeof(CARD32);
 					ptr += r->nOutputs * sizeof(CARD32);
@@ -1199,7 +1199,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_RRGetCrtcInfo:
 				{
-					xRRGetCrtcInfoReply* r = (xRRGetCrtcInfoReply*)data->buf;
+					xRRGetCrtcInfoReply* r = (xRRGetCrtcInfoReply*)reply;
 					log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", r->width, r->height, r->x, r->y);
 					if (r->mode != None)
 					{
@@ -1217,7 +1217,7 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_XineramaQueryScreens:
 				{
-					xXineramaQueryScreensReply* r = (xXineramaQueryScreensReply*)data->buf;
+					xXineramaQueryScreensReply* r = (xXineramaQueryScreensReply*)reply;
 					xXineramaScreenInfo* screens = (xXineramaScreenInfo*)(data->buf+sz_XineramaQueryScreensReply);
 					for (size_t i=0; i<r->number; i++)
 					{

@@ -100,6 +100,11 @@ static          int* mstConfigY[maxMST] = { &config.mainY, &config.mst2Y, &confi
 static unsigned int* mstConfigW[maxMST] = { &config.mainW, &config.mst2W, &config.mst3W, &config.mst4W };
 static unsigned int* mstConfigH[maxMST] = { &config.mainH, &config.mst2H, &config.mst3H, &config.mst4H };
 
+int parseInt(const char *s)
+{
+	return atoi(s);
+}
+
 static void readConfig(const char* fn)
 {
 	//log_debug("Reading config from %s\n", fn);
@@ -129,7 +134,7 @@ static void readConfig(const char* fn)
 
 		#define PARSE_INT(x)						\
 			if (!strcasecmp(buf, #x))				\
-				config.x = atoi(p);					\
+				config.x = parseInt(p);				\
 			else
 
 		PARSE_INT(mainX)

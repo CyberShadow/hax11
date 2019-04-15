@@ -1054,10 +1054,10 @@ static bool handleServerData(X11ConnData* data)
 			{
 				case Note_X_GetGeometry:
 				{
-					xGetGeometryReply* reply = (xGetGeometryReply*)data->buf;
-					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
-					fixCoords(&reply->x, &reply->y, &reply->width, &reply->height);
-					log_debug2("  ->          (%d,%d,%d,%d)\n", reply->x, reply->y, reply->width, reply->height);
+					xGetGeometryReply* r = (xGetGeometryReply*)data->buf;
+					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
+					fixCoords(&r->x, &r->y, &r->width, &r->height);
+					log_debug2("  ->          (%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
 					break;
 				}
 
@@ -1065,8 +1065,8 @@ static bool handleServerData(X11ConnData* data)
 				{
 					if (data->doMouseGrab)
 					{
-						xGetInputFocusReply* reply = (xGetInputFocusReply*)data->buf;
-						log_debug2("  XGetInputFocus(0x%x, %d)\n", reply->focus, reply->revertTo);
+						xGetInputFocusReply* r = (xGetInputFocusReply*)data->buf;
+						log_debug2("  XGetInputFocus(0x%x, %d)\n", r->focus, r->revertTo);
 
 						log_debug("Acquiring mouse grab\n");
 
@@ -1074,11 +1074,11 @@ static bool handleServerData(X11ConnData* data)
 						req.reqType = X_GrabPointer;
 						req.ownerEvents = true; // ?
 						req.length = sizeof(req)/4;
-						req.grabWindow = reply->focus;
+						req.grabWindow = r->focus;
 						req.eventMask = ~0xFFFF8003;
 						req.pointerMode = 1 /* Asynchronous */;
 						req.keyboardMode = 1 /* Asynchronous */;
-						req.confineTo = reply->focus;
+						req.confineTo = r->focus;
 						req.cursor = None;
 						req.time = CurrentTime;
 						injectRequest(data, &req, sizeof(req));
@@ -1090,73 +1090,73 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_InternAtom_Other:
 				{
-					xInternAtomReply* reply = (xInternAtomReply*)data->buf;
-					log_debug2("  X_InternAtom: atom=%d\n", reply->atom);
+					xInternAtomReply* r = (xInternAtomReply*)data->buf;
+					log_debug2("  X_InternAtom: atom=%d\n", r->atom);
 					break;
 				}
 
 				case Note_X_QueryExtension_XFree86_VidModeExtension:
 				{
-					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
 					log_debug2("  X_QueryExtension (XFree86-VidModeExtension): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-					if (reply->present)
-						data->opcode_XFree86_VidModeExtension = reply->major_opcode;
+						r->present, r->major_opcode, r->first_event, r->first_error);
+					if (r->present)
+						data->opcode_XFree86_VidModeExtension = r->major_opcode;
 					break;
 				}
 
 				case Note_X_QueryExtension_RANDR:
 				{
-					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
 					log_debug2("  X_QueryExtension (RANDR): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-					if (reply->present)
-						data->opcode_RANDR = reply->major_opcode;
+						r->present, r->major_opcode, r->first_event, r->first_error);
+					if (r->present)
+						data->opcode_RANDR = r->major_opcode;
 					break;
 				}
 
 				case Note_X_QueryExtension_Xinerama:
 				{
-					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
 					log_debug2("  X_QueryExtension (XINERAMA): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-					if (reply->present)
-						data->opcode_Xinerama = reply->major_opcode;
+						r->present, r->major_opcode, r->first_event, r->first_error);
+					if (r->present)
+						data->opcode_Xinerama = r->major_opcode;
 					break;
 				}
 
 				case Note_X_QueryExtension_NV_GLX:
 				{
-					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
 					log_debug2("  X_QueryExtension (NV-GLX): present=%d major_opcode=%d first_event=%d first_error=%d\n",
-						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
-					if (reply->present)
-						data->opcode_NV_GLX = reply->major_opcode;
+						r->present, r->major_opcode, r->first_event, r->first_error);
+					if (r->present)
+						data->opcode_NV_GLX = r->major_opcode;
 					break;
 				}
 
 				case Note_X_QueryExtension_Other:
 				{
-					xQueryExtensionReply* reply = (xQueryExtensionReply*)data->buf;
+					xQueryExtensionReply* r = (xQueryExtensionReply*)data->buf;
 					log_debug2("  X_QueryExtension: present=%d major_opcode=%d first_event=%d first_error=%d\n",
-						reply->present, reply->major_opcode, reply->first_event, reply->first_error);
+						r->present, r->major_opcode, r->first_event, r->first_error);
 					break;
 				}
 
 				case Note_X_XF86VidModeGetModeLine:
 				{
-					xXF86VidModeGetModeLineReply* reply = (xXF86VidModeGetModeLineReply*)data->buf;
-					log_debug2("  X_XF86VidModeGetModeLine(%d x %d)\n", reply->hdisplay, reply->vdisplay);
-					fixSize(&reply->hdisplay, &reply->vdisplay);
-					log_debug2("  ->                      (%d x %d)\n", reply->hdisplay, reply->vdisplay);
+					xXF86VidModeGetModeLineReply* r = (xXF86VidModeGetModeLineReply*)data->buf;
+					log_debug2("  X_XF86VidModeGetModeLine(%d x %d)\n", r->hdisplay, r->vdisplay);
+					fixSize(&r->hdisplay, &r->vdisplay);
+					log_debug2("  ->                      (%d x %d)\n", r->hdisplay, r->vdisplay);
 					break;
 				}
 
 				case Note_X_XF86VidModeGetAllModeLines:
 				{
-					xXF86VidModeGetAllModeLinesReply* reply = (xXF86VidModeGetAllModeLinesReply*)data->buf;
+					xXF86VidModeGetAllModeLinesReply* r = (xXF86VidModeGetAllModeLinesReply*)data->buf;
 					xXF86VidModeModeInfo* modeInfos = (xXF86VidModeModeInfo*)(data->buf + sz_xXF86VidModeGetAllModeLinesReply);
-					for (size_t i=0; i<reply->modecount; i++)
+					for (size_t i=0; i<r->modecount; i++)
 					{
 						xXF86VidModeModeInfo* modeInfo = modeInfos + i;
 						log_debug2("  X_XF86VidModeGetAllModeLines[%d] = %d x %d\n", i, modeInfo->hdisplay, modeInfo->vdisplay);
@@ -1168,9 +1168,9 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_RRGetScreenInfo:
 				{
-					xRRGetScreenInfoReply* reply = (xRRGetScreenInfoReply*)data->buf;
+					xRRGetScreenInfoReply* r = (xRRGetScreenInfoReply*)data->buf;
 					xScreenSizes* sizes = (xScreenSizes*)(data->buf+sz_xRRGetScreenInfoReply);
-					for (size_t i=0; i<reply->nSizes; i++)
+					for (size_t i=0; i<r->nSizes; i++)
 					{
 						xScreenSizes* size = sizes+i;
 						log_debug2("  X_RRGetScreenInfo[%d] = %d x %d\n", i, size->widthInPixels, size->heightInPixels);
@@ -1182,11 +1182,11 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_RRGetScreenResources:
 				{
-					xRRGetScreenResourcesReply* reply = (xRRGetScreenResourcesReply*)data->buf;
+					xRRGetScreenResourcesReply* r = (xRRGetScreenResourcesReply*)data->buf;
 					void* ptr = data->buf+sz_xRRGetScreenResourcesReply;
-					ptr += reply->nCrtcs * sizeof(CARD32);
-					ptr += reply->nOutputs * sizeof(CARD32);
-					for (size_t i=0; i<reply->nModes; i++)
+					ptr += r->nCrtcs * sizeof(CARD32);
+					ptr += r->nOutputs * sizeof(CARD32);
+					for (size_t i=0; i<r->nModes; i++)
 					{
 						xRRModeInfo* modeInfo = (xRRModeInfo*)ptr;
 						log_debug2("  X_RRGetScreenResources[%d] = %d x %d\n", i, modeInfo->width, modeInfo->height);
@@ -1199,27 +1199,27 @@ static bool handleServerData(X11ConnData* data)
 
 				case Note_X_RRGetCrtcInfo:
 				{
-					xRRGetCrtcInfoReply* reply = (xRRGetCrtcInfoReply*)data->buf;
-					log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
-					if (reply->mode != None)
+					xRRGetCrtcInfoReply* r = (xRRGetCrtcInfoReply*)data->buf;
+					log_debug2("  X_RRGetCrtcInfo = %dx%d @ %dx%d\n", r->width, r->height, r->x, r->y);
+					if (r->mode != None)
 					{
-						if (!fixMonitor(&reply->x, &reply->y, &reply->width, &reply->height))
+						if (!fixMonitor(&r->x, &r->y, &r->width, &r->height))
 						{
-							reply->x = reply->y = reply->width = reply->height = 0;
-							reply->mode = None;
-							reply->rotation = reply->rotations = RR_Rotate_0;
-							reply->nOutput = reply->nPossibleOutput = 0;
+							r->x = r->y = r->width = r->height = 0;
+							r->mode = None;
+							r->rotation = r->rotations = RR_Rotate_0;
+							r->nOutput = r->nPossibleOutput = 0;
 						}
 					}
-					log_debug2("  ->                %dx%d @ %dx%d\n", reply->width, reply->height, reply->x, reply->y);
+					log_debug2("  ->                %dx%d @ %dx%d\n", r->width, r->height, r->x, r->y);
 					break;
 				}
 
 				case Note_X_XineramaQueryScreens:
 				{
-					xXineramaQueryScreensReply* reply = (xXineramaQueryScreensReply*)data->buf;
+					xXineramaQueryScreensReply* r = (xXineramaQueryScreensReply*)data->buf;
 					xXineramaScreenInfo* screens = (xXineramaScreenInfo*)(data->buf+sz_XineramaQueryScreensReply);
-					for (size_t i=0; i<reply->number; i++)
+					for (size_t i=0; i<r->number; i++)
 					{
 						xXineramaScreenInfo* screen = screens+i;
 						log_debug2("  X_XineramaQueryScreens[%d] = %dx%d @ %dx%d\n", i, screen->width, screen->height, screen->x_org, screen->y_org);

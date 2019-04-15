@@ -72,6 +72,7 @@ Name                  | Values  | Description
 `DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)
 `Debug`               | Integer | Log level - Non-zero enables debugging output to stderr and `/tmp/hax11.log`
 `MSTnX`/`Y`/`W`/`H`   | Integer | Coordinates and sizes of additional MST monitors (`n` can be `2`, `3` or `4`).
+`MapK`/`B`*integer*   | Key     | Map keys or buttons - see below
 
 Beware that your window manager and shell use the same APIs,
 thus having other options enabled for such programs may make other monitors unusable.
@@ -109,6 +110,25 @@ Enable=1
 # MoveWindows=1
 # ResizeAll=1
 # Check the status section for example configurations for some games.
+```
+
+### Key / button mapping
+
+You can map a key or mouse button to one or more keys / mouse buttons using configuration lines in the form `Map` ( `K` | `B` ) *integer* `=` ( `K` | `B` ) *integer*.
+The integer is the key or button code, and can be found using e.g. the `xev` utility.
+Defining the same key or button on the left side of `=` allows mapping it to multiple keys / buttons.
+The original key / button event is suppressed. To include it, map the key / button to itself.
+
+Example - reverse the Left and Right arrow keys:
+```
+MapK113=K114
+MapK114=K113
+```
+
+Example - making the left mouse button click also generate an F4 key press (in addition to sending itself):
+```
+MapB1=B1
+MapB1=K70
 ```
 
 ## Installation

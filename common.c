@@ -10,12 +10,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/stat.h>
 
 #include <gnu/lib-names.h>
 
 #include <X11/Xproto.h>
-#include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/xf86vmode.h>
@@ -49,6 +49,26 @@ static void log_error(const char *fmt, ...)
 #define log_debug2(...) do { if (config.debug >= 2) log_error(__VA_ARGS__); } while(0)
 
 // ****************************************************************************
+
+enum
+{
+	MAP_KIND_KEY,
+	MAP_KIND_BUTTON,
+};
+
+//typedef CARD8 KEYCODE;
+
+struct MapInput
+{
+	unsigned char kind;
+	unsigned int code;
+};
+
+struct MapConfig
+{
+	struct MapInput from, to;
+	struct MapConfig *next;
+};
 
 struct Config
 {
@@ -89,6 +109,8 @@ struct Config
 	char dumb; // undocumented - act as a dumb pipe, nothing more
 	char confineMouse;
 	char noResolutionChange;
+
+	struct MapConfig *maps;
 };
 
 static struct Config config = {};
@@ -107,6 +129,22 @@ int parseInt(const char *s)
 	if (!endptr)
 		log_error("Bad number: %s\n", s);
 	return result;
+}
+
+bool parseInput(struct MapInput *input, const char *s)
+{
+	if (tolower(*s) == 'k')
+		input->kind = MAP_KIND_KEY;
+	else
+	if (tolower(*s) == 'b')
+		input->kind = MAP_KIND_BUTTON;
+	else
+	{
+		log_error("Bad map kind: %s\n", s);
+		return false;
+	}
+	input->code = parseInt(s + 1);
+	return true;
 }
 
 static void readConfig(const char* fn)
@@ -135,6 +173,16 @@ static void readConfig(const char* fn)
 		*p = 0;
 		p++;
 		//log_debug("Got line: '%s' = '%s'\n", buf, p);
+
+		if (strncasecmp("Map", buf, 3) == 0)
+		{
+			struct MapConfig *map = malloc(sizeof(struct MapConfig));
+			map->next = config.maps;
+			if (parseInput(&map->from, buf + 3) &&
+				parseInput(&map->to, p))
+				config.maps = map;
+			continue;
+		}
 
 		#define PARSE_INT(x)						\
 			if (!strcasecmp(buf, #x))				\
@@ -683,6 +731,18 @@ static CARD16 injectReply(X11ConnData *data, void* buf, size_t size)
 	log_debug2("[%d][%d] Injected reply %d (%s) with data %d, length %d\n",
 		data->index, reply->generic.sequenceNumber, reply->generic.type, responseNames[reply->generic.type], reply->generic.data1, size);
 	return reply->generic.sequenceNumber;
+}
+
+static void injectEvent(X11ConnData *data, xEvent* event)
+{
+	struct Connection conn = {};
+	conn.recvfd = data->server;
+	conn.sendfd = data->client;
+	conn.dir = '}';
+
+	sendAll(&conn, event, sizeof(xEvent));
+	log_debug2("[%d] Injected event %d (%s) with data %d\n",
+		data->index, event->u.u.type, responseNames[event->u.u.type], event->u.u.detail);
 }
 
 static bool handleClientData(X11ConnData* data)
@@ -1279,6 +1339,42 @@ static bool handleServerData(X11ConnData* data)
 			{
 				log_debug("Filtering out FocusOut event\n");
 				return true;
+			}
+			break;
+
+		case KeyPress:
+		case KeyRelease:
+		case ButtonPress:
+		case ButtonRelease:
+			if (config.maps)
+			{
+				bool isPress = reply->generic.type == KeyPress || reply->generic.type == ButtonPress;
+				bool isButton = reply->generic.type == ButtonPress || reply->generic.type == ButtonRelease;
+				int kind = isButton ? MAP_KIND_BUTTON : MAP_KIND_KEY;
+
+				bool found = false;
+				for (struct MapConfig *map = config.maps; map; map = map->next)
+					if (map->from.kind == kind && map->from.code == reply->event.u.u.detail)
+					{
+						static const char *kindNames[] = { "key", "button" };
+						log_debug("Mapping %s %u to %s %u\n",
+							kindNames[map->from.kind], map->from.code,
+							kindNames[map->to.kind], map->to.code);
+
+						xEvent injected = reply->event;
+						injected.u.u.type = isPress
+							? map->to.kind == MAP_KIND_BUTTON ? ButtonPress : KeyPress
+							: map->to.kind == MAP_KIND_BUTTON ? ButtonRelease : KeyRelease;
+						injected.u.u.detail = map->to.code;
+						injectEvent(data, &injected);
+						found = true;
+					}
+
+				if (found)
+				{
+					log_debug("Filtering out mapped input event\n");
+					return true;
+				}
 			}
 			break;
 	}

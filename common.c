@@ -102,7 +102,11 @@ static unsigned int* mstConfigH[maxMST] = { &config.mainH, &config.mst2H, &confi
 
 int parseInt(const char *s)
 {
-	return atoi(s);
+	char *endptr = 0;
+	long int result = strtol(s, &endptr, 0);
+	if (!endptr)
+		log_error("Bad number: %s\n", s);
+	return result;
 }
 
 static void readConfig(const char* fn)

@@ -16,7 +16,7 @@ lib32/hax11.so: lib32 common.c lib.c Makefile
 lib64/hax11.so: lib64 common.c lib.c Makefile
 	gcc -m64 -Wall -Wextra -g lib.c -o $@ -fPIC -shared -ldl -D_GNU_SOURCE
 
-server:
+server: common.c server.c
 	gcc -o server -lpthread server.c
 
 install:

@@ -1098,6 +1098,8 @@ static bool handleServerData(X11ConnData* data)
 	log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%d\n",
 		data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
 
+	bool serialIsValid = true;
+
 	switch (reply->generic.type)
 	{
 		case X_Error:
@@ -1305,6 +1307,10 @@ static bool handleServerData(X11ConnData* data)
 			break;
 		}
 
+		case KeymapNotify:
+			serialIsValid = false;
+			break;
+
 		case FocusIn:
 			if (config.confineMouse)
 			{
@@ -1382,25 +1388,28 @@ static bool handleServerData(X11ConnData* data)
 	if (config.debug >= 2 && config.actualX && config.actualY && memmem(data->buf, ofs, &config.actualX, 2) && memmem(data->buf, ofs, &config.actualY, 2))
 		log_debug2("   Found actualW/H in output! ----------------------------------------------------------------------------------------------\n");
 
-	while (data->serialLast != reply->generic.sequenceNumber)
+	if (serialIsValid)
 	{
-		data->skip[data->serialLast] = false;
-		data->serialLast++;
-		if (data->skip[data->serialLast])
+		while (data->serialLast != reply->generic.sequenceNumber)
 		{
-			data->serialDelta++;
-			log_debug2("  Incrementing serialDelta for injected reply (now at %d)\n", data->serialDelta);
+			data->skip[data->serialLast] = false;
+			data->serialLast++;
+			if (data->skip[data->serialLast])
+			{
+				data->serialDelta++;
+				log_debug2("  Incrementing serialDelta for injected reply (now at %d)\n", data->serialDelta);
+			}
 		}
-	}
 
-	if (reply->generic.type < 2 && // reply or error only, not event
-		data->skip[reply->generic.sequenceNumber])
-	{
-		log_debug2("  Skipping this reply\n");
-		return true;
-	}
+		if (reply->generic.type < 2 && // reply or error only, not event
+			data->skip[reply->generic.sequenceNumber])
+		{
+			log_debug2("  Skipping this reply\n");
+			return true;
+		}
 
-	reply->generic.sequenceNumber -= data->serialDelta;
+		reply->generic.sequenceNumber -= data->serialDelta;
+	}
 
 	if (!sendAll(&conn, data->buf, ofs)) return false;
 

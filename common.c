@@ -793,6 +793,7 @@ static bool handleClientData(X11ConnData* data)
 	}
 	CARD16 sequenceNumber = ++data->serial;
 	log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
+	/* log_debug2("  [server: %d] <- [client: %d]\n", sequenceNumber, sequenceNumber - data->serialDelta); */
 	bufSize(&data->buf, &data->bufLen, requestLength);
 	req = (xReq*)data->buf; // in case bufSize moved buf
 
@@ -1392,7 +1393,9 @@ static bool handleServerData(X11ConnData* data)
 			return true;
 		}
 
+		/* CARD16 oldSerial = reply->generic.sequenceNumber; */
 		reply->generic.sequenceNumber -= data->serialDelta;
+		/* log_debug2("  [server: %d] -> [client: %d]\n", oldSerial, reply->generic.sequenceNumber); */
 	}
 
 	if (!sendAll(&conn, data->buf, ofs)) return false;

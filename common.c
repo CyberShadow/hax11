@@ -783,7 +783,7 @@ static bool handleClientData(X11ConnData* data)
 	if (!recvAll(&conn, data->buf+ofs, sz_xReq)) return false;
 	ofs += sz_xReq;
 
-	const xReq* req = (xReq*)data->buf;
+	xReq* req = (xReq*)data->buf;
 	uint requestLength = req->length * 4;
 	if (requestLength == 0) // Big Requests Extension
 	{
@@ -879,6 +879,16 @@ static bool handleClientData(X11ConnData* data)
 				fixCoords((INT16*)&hints->x, (INT16*)&hints->y, (CARD16*)&hints->width, (CARD16*)&hints->height);
 				fixSize((CARD16*)&hints->max_width, (CARD16*)&hints->max_height);
 				fixSize((CARD16*)&hints->base_width, (CARD16*)&hints->base_height);
+			}
+			break;
+		}
+
+		case X_UngrabPointer:
+		{
+			if (config.confineMouse)
+			{
+				log_debug2(" X_UngrabPointer: Stubbing client request\n");
+				req->reqType = X_NoOperation;
 			}
 			break;
 		}

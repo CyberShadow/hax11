@@ -633,6 +633,24 @@ static const char *responseNames[256] =
 	NULL,
 };
 
+static const char* focusModes[] = {
+	"Normal",
+	"Grab",
+	"Ungrab",
+	"WhileGrabbed",
+};
+
+static const char* focusDetail[] = {
+	"Ancestor",
+	"Virtual",
+	"Inferior",
+	"Nonlinear",
+	"NonlinearVirtual",
+	"Pointer",
+	"PointerRoot",
+	"DetailNone",
+};
+
 static void bufSize(unsigned char** ptr, size_t *len, size_t needed)
 {
 	if (needed > *len)
@@ -1297,6 +1315,10 @@ static bool handleServerData(X11ConnData* data)
 			break;
 
 		case FocusIn:
+			log_debug2("FocusIn: window=%x mode=%s detail=%s\n",
+				reply->event.u.focus.window,
+				focusModes[reply->event.u.focus.mode],
+				focusDetail[reply->event.u.u.detail]);
 			if (config.confineMouse)
 			{
 				log_debug("Grabbing mouse grab\n");
@@ -1317,6 +1339,10 @@ static bool handleServerData(X11ConnData* data)
 			break;
 
 		case FocusOut:
+			log_debug2("FocusOut: window=%x mode=%s detail=%s\n",
+				reply->event.u.focus.window,
+				focusModes[reply->event.u.focus.mode],
+				focusDetail[reply->event.u.u.detail]);
 			if (config.confineMouse)
 			{
 				log_debug("Releasing mouse grab\n");

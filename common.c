@@ -936,34 +936,43 @@ static bool handleClientData(X11ConnData* data)
 
 		case X_GetSelectionOwner:
 		{
-			xResourceReq* req = (xResourceReq*)data->buf;
-			log_debug(" Selection atom: %d\n", req->id);
-			if (config.noPrimarySelection && req->id == XA_PRIMARY)
+			if (config.noPrimarySelection)
 			{
-				req->id = XA_CUT_BUFFER0;
-				log_debug(" -> Replaced atom: %d\n", req->id);
+				xResourceReq* req = (xResourceReq*)data->buf;
+				log_debug(" Selection atom: %d\n", req->id);
+				if (req->id == XA_PRIMARY)
+				{
+					req->id = XA_CUT_BUFFER0;
+					log_debug(" -> Replaced atom: %d\n", req->id);
+				}
 			}
 			break;
 		}
 		case X_SetSelectionOwner:
 		{
-			xSetSelectionOwnerReq* req = (xSetSelectionOwnerReq*)data->buf;
-			log_debug(" Selection atom: %d\n", req->selection);
-			if (config.noPrimarySelection && req->selection == XA_PRIMARY)
+			if (config.noPrimarySelection)
 			{
-				req->selection = XA_CUT_BUFFER1;
-				log_debug(" -> Replaced atom: %d\n", req->selection);
+				xSetSelectionOwnerReq* req = (xSetSelectionOwnerReq*)data->buf;
+				log_debug(" Selection atom: %d\n", req->selection);
+				if (req->selection == XA_PRIMARY)
+				{
+					req->selection = XA_CUT_BUFFER1;
+					log_debug(" -> Replaced atom: %d\n", req->selection);
+				}
 			}
 			break;
 		}
 		case X_ConvertSelection:
 		{
-			xConvertSelectionReq* req = (xConvertSelectionReq*)data->buf;
-			log_debug(" Selection atom: %d\n", req->selection);
-			if (config.noPrimarySelection && req->selection == XA_PRIMARY)
+			if (config.noPrimarySelection)
 			{
-				req->selection = XA_CUT_BUFFER2;
-				log_debug(" -> Replaced atom: %d\n", req->selection);
+				xConvertSelectionReq* req = (xConvertSelectionReq*)data->buf;
+				log_debug(" Selection atom: %d\n", req->selection);
+				if (req->selection == XA_PRIMARY)
+				{
+					req->selection = XA_CUT_BUFFER2;
+					log_debug(" -> Replaced atom: %d\n", req->selection);
+				}
 			}
 			break;
 		}

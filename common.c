@@ -698,7 +698,6 @@ enum
 	Note_X_RRGetCrtcInfo,
 	Note_X_XineramaQueryScreens,
 	Note_NV_GLX,
-	Note_Injected_MouseGrab_X_GetInputFocus,
 };
 
 static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
@@ -1280,29 +1279,6 @@ static bool handleServerData(X11ConnData* data)
 #endif
 					break;
 				}
-
-				case Note_Injected_MouseGrab_X_GetInputFocus:
-				{
-					xGetInputFocusReply* r = &reply->inputFocus;
-					log_debug2("  XGetInputFocus(0x%x, %d)\n", r->focus, r->revertTo);
-
-					log_debug("Acquiring mouse grab\n");
-
-					xGrabPointerReq req;
-					req.reqType = X_GrabPointer;
-					req.ownerEvents = true; // ?
-					req.length = sizeof(req)/4;
-					req.grabWindow = r->focus;
-					req.eventMask = ~0xFFFF8003;
-					req.pointerMode = 1 /* Asynchronous */;
-					req.keyboardMode = 1 /* Asynchronous */;
-					req.confineTo = r->focus;
-					req.cursor = None;
-					req.time = CurrentTime;
-					injectRequest(data, &req, sizeof(req));
-
-					break;
-				}
 			}
 			break;
 		}
@@ -1314,13 +1290,20 @@ static bool handleServerData(X11ConnData* data)
 		case FocusIn:
 			if (config.confineMouse)
 			{
-				/* Me must query which window has the focus before we can lock the mouse to it */
-				xReq req;
-				req.reqType = X_GetInputFocus;
+				log_debug("Grabbing mouse grab\n");
+
+				xGrabPointerReq req;
+				req.reqType = X_GrabPointer;
+				req.ownerEvents = true; // ?
 				req.length = sizeof(req)/4;
-				CARD16 sequenceNumber = injectRequest(data, &req, sizeof(req));
-				data->notes[sequenceNumber] = Note_Injected_MouseGrab_X_GetInputFocus;
-				data->skip[sequenceNumber] = true;
+				req.grabWindow = reply->event.u.focus.window;
+				req.eventMask = ~0xFFFF8003;
+				req.pointerMode = 1 /* Asynchronous */;
+				req.keyboardMode = 1 /* Asynchronous */;
+				req.confineTo = reply->event.u.focus.window;
+				req.cursor = None;
+				req.time = CurrentTime;
+				injectRequest(data, &req, sizeof(req));
 			}
 			break;
 

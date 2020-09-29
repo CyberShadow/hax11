@@ -1350,7 +1350,9 @@ static bool handleServerData(X11ConnData* data)
 				reply->event.u.focus.window,
 				focusModes[reply->event.u.focus.mode],
 				focusDetail[reply->event.u.u.detail]);
-			if (config.confineMouse)
+			if (config.confineMouse
+				&& reply->event.u.focus.mode == NotifyNormal
+				&& reply->event.u.u.detail == NotifyNonlinear)
 			{
 				log_debug("Grabbing mouse grab\n");
 				grabPointer(data, reply->event.u.focus.window);
@@ -1363,7 +1365,10 @@ static bool handleServerData(X11ConnData* data)
 				reply->event.u.focus.window,
 				focusModes[reply->event.u.focus.mode],
 				focusDetail[reply->event.u.u.detail]);
-			if (config.confineMouse)
+			if (config.confineMouse
+				&& (reply->event.u.focus.mode == NotifyNormal
+				 || reply->event.u.focus.mode == NotifyWhileGrabbed)
+				&& reply->event.u.u.detail == NotifyNonlinear)
 			{
 				log_debug("Releasing mouse grab\n");
 

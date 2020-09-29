@@ -697,6 +697,7 @@ typedef struct
 	CARD16 serialLast; // The serial of the last received reply
 	CARD16 serialDelta;
 	unsigned char skip[1<<16];
+	Window grabWindow;
 } X11ConnData;
 
 enum
@@ -715,6 +716,7 @@ enum
 	Note_X_RRGetScreenResources,
 	Note_X_RRGetCrtcInfo,
 	Note_X_XineramaQueryScreens,
+	Note_X_GrabPointer,
 	Note_NV_GLX,
 };
 
@@ -759,6 +761,23 @@ static void injectEvent(X11ConnData *data, xEvent* event)
 	sendAll(&conn, event, sizeof(xEvent));
 	log_debug2("[%d] Injected event %d (%s) with data %d\n",
 		data->index, event->u.u.type, responseNames[event->u.u.type], event->u.u.detail);
+}
+
+static void grabPointer(X11ConnData* data, Window window)
+{
+	xGrabPointerReq req;
+	req.reqType = X_GrabPointer;
+	req.ownerEvents = true; // ?
+	req.length = sizeof(req)/4;
+	req.grabWindow = window;
+	req.eventMask = ~0xFFFF8003;
+	req.pointerMode = 1 /* Asynchronous */;
+	req.keyboardMode = 1 /* Asynchronous */;
+	req.confineTo = window;
+	req.cursor = None;
+	req.time = CurrentTime;
+	CARD16 serial = injectRequest(data, &req, sizeof(req));
+	data->notes[serial] = Note_X_GrabPointer;
 }
 
 static bool handleClientData(X11ConnData* data)
@@ -1294,6 +1313,18 @@ static bool handleServerData(X11ConnData* data)
 					break;
 				}
 
+				case Note_X_GrabPointer:
+				{
+					xGrabPointerReply* r = (xGrabPointerReply*)reply;
+					log_debug2("  X_GrabPointer: status=%d\n", r->status);
+					if (r->status == AlreadyGrabbed && data->grabWindow != 0)
+					{
+						log_debug("Retrying mouse grab\n");
+						grabPointer(data, data->grabWindow);
+					}
+					break;
+				}
+
 				case Note_NV_GLX:
 				{
 #if 0
@@ -1322,19 +1353,8 @@ static bool handleServerData(X11ConnData* data)
 			if (config.confineMouse)
 			{
 				log_debug("Grabbing mouse grab\n");
-
-				xGrabPointerReq req;
-				req.reqType = X_GrabPointer;
-				req.ownerEvents = true; // ?
-				req.length = sizeof(req)/4;
-				req.grabWindow = reply->event.u.focus.window;
-				req.eventMask = ~0xFFFF8003;
-				req.pointerMode = 1 /* Asynchronous */;
-				req.keyboardMode = 1 /* Asynchronous */;
-				req.confineTo = reply->event.u.focus.window;
-				req.cursor = None;
-				req.time = CurrentTime;
-				injectRequest(data, &req, sizeof(req));
+				grabPointer(data, reply->event.u.focus.window);
+				data->grabWindow = reply->event.u.focus.window;
 			}
 			break;
 
@@ -1352,6 +1372,8 @@ static bool handleServerData(X11ConnData* data)
 				req.length = sizeof(req)/4;
 				req.id = CurrentTime;
 				injectRequest(data, &req, sizeof(req));
+
+				data->grabWindow = 0;
 			}
 
 			if (config.filterFocus)

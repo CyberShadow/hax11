@@ -1464,9 +1464,8 @@ static void* workThreadProc(void* dataPtr)
 
 	bufSize(&data->buf, &data->bufLen, 1<<16);
 
-	fd_set readSet, errorSet;
+	fd_set readSet;
 	FD_ZERO(&readSet);
-	FD_ZERO(&errorSet);
 
 	if (data->server >= FD_SETSIZE || data->client >= FD_SETSIZE)
 	{
@@ -1478,23 +1477,10 @@ static void* workThreadProc(void* dataPtr)
     {
 	    FD_SET(data->client, &readSet );
 	    FD_SET(data->server, &readSet );
-	    FD_SET(data->client, &errorSet);
-	    FD_SET(data->server, &errorSet);
 
-	    if (select(FD_SETSIZE, &readSet, NULL, &errorSet, NULL) < 0)
+	    if (select(FD_SETSIZE, &readSet, NULL, NULL, NULL) < 0)
 	    {
 		    log_error("select() failed");
-		    break;
-	    }
-
-	    if (FD_ISSET (data->client, &errorSet))
-	    {
-		    log_debug("Error on client socket");
-		    break;
-	    }
-	    if (FD_ISSET (data->server, &errorSet))
-	    {
-		    log_debug("Error on server socket");
 		    break;
 	    }
 

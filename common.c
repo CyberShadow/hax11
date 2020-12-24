@@ -12,6 +12,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <poll.h>
 
 #include <gnu/lib-names.h>
 
@@ -1467,27 +1468,40 @@ static void* workThreadProc(void* dataPtr)
 	fd_set readSet;
 	FD_ZERO(&readSet);
 
-	if (data->server >= FD_SETSIZE || data->client >= FD_SETSIZE)
-	{
-		log_error("Too many file descriptors for FD_SETSIZE!");
-		return NULL;
-	}
+	struct pollfd fds[2] = {
+		{
+			.fd = data->client,
+			.events = POLLRDNORM,
+		},
+		{
+			.fd = data->server,
+			.events = POLLRDNORM,
+		},
+	};
 
 	while (true)
     {
-	    FD_SET(data->client, &readSet );
-	    FD_SET(data->server, &readSet );
-
-	    if (select(FD_SETSIZE, &readSet, NULL, NULL, NULL) < 0)
+	    if (poll(fds, 2, -1) < 0)
 	    {
 		    log_error("select() failed");
 		    break;
 	    }
 
-	    if (FD_ISSET (data->client, &readSet))
+	    if (fds[0].revents & (POLLERR|POLLHUP|POLLNVAL))
+	    {
+		    log_debug("Error on client socket");
+		    break;
+	    }
+	    if (fds[1].revents & (POLLERR|POLLHUP|POLLNVAL))
+	    {
+		    log_debug("Error on server socket");
+		    break;
+	    }
+
+	    if (fds[0].revents)
 		    if (!handleClientData(data))
 			    break;
-	    if (FD_ISSET (data->server, &readSet))
+	    if (fds[1].revents)
 		    if (!handleServerData(data))
 			    break;
     }

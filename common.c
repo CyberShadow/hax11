@@ -1489,12 +1489,12 @@ static void* workThreadProc(void* dataPtr)
 
 	    if (fds[0].revents & (POLLERR|POLLHUP|POLLNVAL))
 	    {
-		    log_debug("Error on client socket");
+		    log_debug("Error on client socket\n");
 		    break;
 	    }
 	    if (fds[1].revents & (POLLERR|POLLHUP|POLLNVAL))
 	    {
-		    log_debug("Error on server socket");
+		    log_debug("Error on server socket\n");
 		    break;
 	    }
 

@@ -407,6 +407,8 @@ static char sendAll(struct Connection* conn, const void* buf, size_t length)
 
 		int len = sendmsg(conn->sendfd, &msg, MSG_NOSIGNAL);
 		if (len <= 0)
+			log_debug("%c sendmsg returned %d\n", conn->dir, len);
+		if (len <= 0)
 			return 0;
 
 		hexDump(msg.msg_control, msg.msg_controllen, conn->dir, '%');
@@ -439,6 +441,8 @@ static char recvAll(struct Connection* conn, void* buf, size_t length)
 		msg.msg_controllen = ANCIL_SIZE - conn->ancilWrite;
 
 		int len = recvmsg(conn->recvfd, &msg, 0);
+		if (len <= 0)
+			log_debug("%c recvmsg returned %d\n", conn->dir, len);
 		if (len < 0)
 			return 0;
 
@@ -1500,10 +1504,16 @@ static void* workThreadProc(void* dataPtr)
 
 		if (fds[0].revents)
 			if (!handleClientData(data))
+			{
+				log_debug("End of client data\n");
 				break;
+			}
 		if (fds[1].revents)
 			if (!handleServerData(data))
+			{
+				log_debug("End of server data\n");
 				break;
+			}
 	}
 
 	log_debug("Exiting work thread.\n");

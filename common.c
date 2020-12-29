@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <poll.h>
+#include <inttypes.h>
 
 #include <gnu/lib-names.h>
 
@@ -48,6 +49,19 @@ static void log_error(const char *fmt, ...)
 
 #define log_debug(...) do { if (config.debug >= 1) log_error(__VA_ARGS__); } while(0)
 #define log_debug2(...) do { if (config.debug >= 2) log_error(__VA_ARGS__); } while(0)
+
+// Mirrors CARD32/CARD64 defines in /usr/include/X11/Xmd.h:
+#ifdef LONG64
+#define PRIuCARD32 "u"
+#define PRIuCARD64 "lu"
+#define PRIxCARD32 "x"
+#define PRIxCARD64 "lx"
+#else
+#define PRIuCARD32 "lu"
+#define PRIuCARD64 "llu"
+#define PRIxCARD32 "lx"
+#define PRIxCARD64 "llx"
+#endif
 
 // ****************************************************************************
 
@@ -736,7 +750,7 @@ static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 	sendAll(&conn, req, size);
 	CARD16 sequenceNumber = ++data->serial;
 	data->skip[sequenceNumber] = true;
-	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
+	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %zu\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
 	return sequenceNumber;
 }
 
@@ -751,7 +765,7 @@ static CARD16 injectReply(X11ConnData *data, void* buf, size_t size)
 	reply->generic.sequenceNumber = data->serial - data->serialDelta--;
 	reply->generic.length = ((size < sz_xReply ? sz_xReply : size) - sz_xReply + 3) / 4;
 	sendAll(&conn, reply, size);
-	log_debug2("[%d][%d] Injected reply %d (%s) with data %d, length %d\n",
+	log_debug2("[%d][%d] Injected reply %d (%s) with data %d, length %zu\n",
 		data->index, reply->generic.sequenceNumber, reply->generic.type, responseNames[reply->generic.type], reply->generic.data1, size);
 	return reply->generic.sequenceNumber;
 }
@@ -913,7 +927,7 @@ static bool handleClientData(X11ConnData* data)
 		case X_ChangeProperty:
 		{
 			xChangePropertyReq* req = (xChangePropertyReq*)data->buf;
-			log_debug2(" XChangeProperty: property=%d type=%d format=%d)\n", req->property, req->type, req->format);
+			log_debug2(" XChangeProperty: property=%"PRIuCARD32" type=%"PRIuCARD32" format=%d)\n", req->property, req->type, req->format);
 			if (req->type == XA_WM_SIZE_HINTS)
 			{
 				XSizeHints* hints = (XSizeHints*)(data->buf + sz_xChangePropertyReq);
@@ -981,11 +995,11 @@ static bool handleClientData(X11ConnData* data)
 			if (config.noPrimarySelection)
 			{
 				xResourceReq* req = (xResourceReq*)data->buf;
-				log_debug(" Selection atom: %d\n", req->id);
+				log_debug(" Selection atom: %"PRIuCARD32"\n", req->id);
 				if (req->id == XA_PRIMARY)
 				{
 					req->id = XA_CUT_BUFFER0;
-					log_debug(" -> Replaced atom: %d\n", req->id);
+					log_debug(" -> Replaced atom: %"PRIuCARD32"\n", req->id);
 				}
 			}
 			break;
@@ -995,11 +1009,11 @@ static bool handleClientData(X11ConnData* data)
 			if (config.noPrimarySelection)
 			{
 				xSetSelectionOwnerReq* req = (xSetSelectionOwnerReq*)data->buf;
-				log_debug(" Selection atom: %d\n", req->selection);
+				log_debug(" Selection atom: %"PRIuCARD32"\n", req->selection);
 				if (req->selection == XA_PRIMARY)
 				{
 					req->selection = XA_CUT_BUFFER1;
-					log_debug(" -> Replaced atom: %d\n", req->selection);
+					log_debug(" -> Replaced atom: %"PRIuCARD32"\n", req->selection);
 				}
 			}
 			break;
@@ -1009,11 +1023,11 @@ static bool handleClientData(X11ConnData* data)
 			if (config.noPrimarySelection)
 			{
 				xConvertSelectionReq* req = (xConvertSelectionReq*)data->buf;
-				log_debug(" Selection atom: %d\n", req->selection);
+				log_debug(" Selection atom: %"PRIuCARD32"\n", req->selection);
 				if (req->selection == XA_PRIMARY)
 				{
 					req->selection = XA_CUT_BUFFER2;
-					log_debug(" -> Replaced atom: %d\n", req->selection);
+					log_debug(" -> Replaced atom: %"PRIuCARD32"\n", req->selection);
 				}
 			}
 			break;
@@ -1149,7 +1163,7 @@ static bool handleServerData(X11ConnData* data)
 		if (!recvAll(&conn, data->buf+ofs, dataLength)) return false;
 		ofs += dataLength;
 	}
-	log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%d\n",
+	log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%zu\n",
 		data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
 
 	bool serialIsValid = true;
@@ -1159,7 +1173,7 @@ static bool handleServerData(X11ConnData* data)
 		case X_Error:
 		{
 			xError* err = (xError*)data->buf;
-			log_debug2(" [%d] Error - code=%d resourceID=0x%x minorCode=%d majorCode=%d (%s)\n",
+			log_debug2(" [%d] Error - code=%d resourceID=0x%"PRIxCARD32" minorCode=%d majorCode=%d (%s)\n",
 				data->index, err->errorCode, err->resourceID, err->minorCode, err->majorCode, requestNames[err->majorCode]);
 			break;
 		}
@@ -1180,7 +1194,7 @@ static bool handleServerData(X11ConnData* data)
 				case Note_X_InternAtom_Other:
 				{
 					xInternAtomReply* r = &reply->atom;
-					log_debug2("  X_InternAtom: atom=%d\n", r->atom);
+					log_debug2("  X_InternAtom: atom=%"PRIuCARD32"\n", r->atom);
 					break;
 				}
 
@@ -1248,7 +1262,7 @@ static bool handleServerData(X11ConnData* data)
 					for (size_t i=0; i<r->modecount; i++)
 					{
 						xXF86VidModeModeInfo* modeInfo = modeInfos + i;
-						log_debug2("  X_XF86VidModeGetAllModeLines[%d] = %d x %d\n", i, modeInfo->hdisplay, modeInfo->vdisplay);
+						log_debug2("  X_XF86VidModeGetAllModeLines[%zu] = %d x %d\n", i, modeInfo->hdisplay, modeInfo->vdisplay);
 						fixSize(&modeInfo->hdisplay, &modeInfo->vdisplay);
 						log_debug2("  ->                                %d x %d\n",    modeInfo->hdisplay, modeInfo->vdisplay);
 					}
@@ -1262,7 +1276,7 @@ static bool handleServerData(X11ConnData* data)
 					for (size_t i=0; i<r->nSizes; i++)
 					{
 						xScreenSizes* size = sizes+i;
-						log_debug2("  X_RRGetScreenInfo[%d] = %d x %d\n", i, size->widthInPixels, size->heightInPixels);
+						log_debug2("  X_RRGetScreenInfo[%zu] = %d x %d\n", i, size->widthInPixels, size->heightInPixels);
 						fixSize(&size->widthInPixels, &size->heightInPixels);
 						log_debug2("  ->                      %d x %d\n",    size->widthInPixels, size->heightInPixels);
 					}
@@ -1278,7 +1292,7 @@ static bool handleServerData(X11ConnData* data)
 					for (size_t i=0; i<r->nModes; i++)
 					{
 						xRRModeInfo* modeInfo = (xRRModeInfo*)ptr;
-						log_debug2("  X_RRGetScreenResources[%d] = %d x %d\n", i, modeInfo->width, modeInfo->height);
+						log_debug2("  X_RRGetScreenResources[%zu] = %d x %d\n", i, modeInfo->width, modeInfo->height);
 						fixSize(&modeInfo->width, &modeInfo->height);
 						log_debug2("  ->                           %d x %d\n",    modeInfo->width, modeInfo->height);
 						ptr += sz_xRRModeInfo;
@@ -1311,7 +1325,7 @@ static bool handleServerData(X11ConnData* data)
 					for (size_t i=0; i<r->number; i++)
 					{
 						xXineramaScreenInfo* screen = screens+i;
-						log_debug2("  X_XineramaQueryScreens[%d] = %dx%d @ %dx%d\n", i, screen->width, screen->height, screen->x_org, screen->y_org);
+						log_debug2("  X_XineramaQueryScreens[%zu] = %dx%d @ %dx%d\n", i, screen->width, screen->height, screen->x_org, screen->y_org);
 						fixCoords(&screen->x_org, &screen->y_org, &screen->width, &screen->height);
 						log_debug2("  ->                           %dx%d @ %dx%d\n",    screen->width, screen->height, screen->x_org, screen->y_org);
 					}
@@ -1351,7 +1365,7 @@ static bool handleServerData(X11ConnData* data)
 			break;
 
 		case FocusIn:
-			log_debug2("FocusIn: window=%x mode=%s detail=%s\n",
+			log_debug2("FocusIn: window=%"PRIxCARD32" mode=%s detail=%s\n",
 				reply->event.u.focus.window,
 				focusModes[reply->event.u.focus.mode],
 				focusDetail[reply->event.u.u.detail]);
@@ -1366,7 +1380,7 @@ static bool handleServerData(X11ConnData* data)
 			break;
 
 		case FocusOut:
-			log_debug2("FocusOut: window=%x mode=%s detail=%s\n",
+			log_debug2("FocusOut: window=%"PRIxCARD32" mode=%s detail=%s\n",
 				reply->event.u.focus.window,
 				focusModes[reply->event.u.focus.mode],
 				focusDetail[reply->event.u.u.detail]);

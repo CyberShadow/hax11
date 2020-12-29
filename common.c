@@ -1480,31 +1480,31 @@ static void* workThreadProc(void* dataPtr)
 	};
 
 	while (true)
-    {
-	    if (poll(fds, 2, -1) < 0)
-	    {
-		    log_error("select() failed");
-		    break;
-	    }
+	{
+		if (poll(fds, 2, -1) < 0)
+		{
+			log_error("select() failed");
+			break;
+		}
 
-	    if (fds[0].revents & (POLLERR|POLLHUP|POLLNVAL))
-	    {
-		    log_debug("Error on client socket\n");
-		    break;
-	    }
-	    if (fds[1].revents & (POLLERR|POLLHUP|POLLNVAL))
-	    {
-		    log_debug("Error on server socket\n");
-		    break;
-	    }
+		if (fds[0].revents & (POLLERR|POLLHUP|POLLNVAL))
+		{
+			log_debug("Error on client socket\n");
+			break;
+		}
+		if (fds[1].revents & (POLLERR|POLLHUP|POLLNVAL))
+		{
+			log_debug("Error on server socket\n");
+			break;
+		}
 
-	    if (fds[0].revents)
-		    if (!handleClientData(data))
-			    break;
-	    if (fds[1].revents)
-		    if (!handleServerData(data))
-			    break;
-    }
+		if (fds[0].revents)
+			if (!handleClientData(data))
+				break;
+		if (fds[1].revents)
+			if (!handleServerData(data))
+				break;
+	}
 
 	log_debug("Exiting work thread.\n");
 	shutdown(data->client, SHUT_RDWR);

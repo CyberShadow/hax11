@@ -737,6 +737,7 @@ enum
 	Note_X_RRGetScreenInfo,
 	Note_X_RRGetScreenResources,
 	Note_X_RRGetCrtcInfo,
+	Note_X_RRGetScreenResourcesCurrent,
 	Note_X_XineramaQueryScreens,
 	Note_X_GrabPointer,
 	Note_NV_GLX,
@@ -1085,6 +1086,9 @@ static bool handleClientData(X11ConnData* data)
 					case X_RRGetCrtcInfo:
 						data->notes[sequenceNumber] = Note_X_RRGetCrtcInfo;
 						break;
+					case X_RRGetScreenResourcesCurrent:
+						data->notes[sequenceNumber] = Note_X_RRGetScreenResourcesCurrent;
+						break;
 				}
 			}
 			else
@@ -1318,6 +1322,23 @@ static bool handleServerData(X11ConnData* data)
 						}
 					}
 					log_debug2("  ->                %dx%d @ %dx%d\n", r->width, r->height, r->x, r->y);
+					break;
+				}
+
+				case Note_X_RRGetScreenResourcesCurrent: // Note: identical to RRGetScreenResources
+				{
+					xRRGetScreenResourcesCurrentReply* r = (xRRGetScreenResourcesCurrentReply*)reply;
+					void* ptr = data->buf+sz_xRRGetScreenResourcesCurrentReply;
+					ptr += r->nCrtcs * sizeof(CARD32);
+					ptr += r->nOutputs * sizeof(CARD32);
+					for (size_t i=0; i<r->nModes; i++)
+					{
+						xRRModeInfo* modeInfo = (xRRModeInfo*)ptr;
+						log_debug2("  X_RRGetScreenResourcesCurrent[%zu] = %d x %d\n", i, modeInfo->width, modeInfo->height);
+						fixSize(&modeInfo->width, &modeInfo->height);
+						log_debug2("  ->                           %d x %d\n",    modeInfo->width, modeInfo->height);
+						ptr += sz_xRRModeInfo;
+					}
 					break;
 				}
 

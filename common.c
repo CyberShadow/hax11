@@ -1231,75 +1231,6 @@ static bool handleClientData(X11ConnData* data)
 			break;
 		}
 
-		case X_UngrabPointer:
-		{
-			if (config.confineMouse)
-			{
-				log_debug2(" X_UngrabPointer: Stubbing client request\n");
-				req->reqType = X_NoOperation;
-			}
-			break;
-		}
-
-		case X_QueryExtension:
-		{
-			xQueryExtensionReq* req = (xQueryExtensionReq*)data->buf;
-			const char* name = (const char*)(data->buf + sz_xQueryExtensionReq);
-			log_debug2(" XQueryExtension(%.*s)\n", req->nbytes, name);
-
-			if (!strmemcmp("XFree86-VidModeExtension", name, req->nbytes))
-				data->notes[sequenceNumber] = Note_X_QueryExtension_XFree86_VidModeExtension;
-			else
-			if (!strmemcmp("RANDR", name, req->nbytes))
-				data->notes[sequenceNumber] = Note_X_QueryExtension_RANDR;
-			else
-			if (!strmemcmp("XINERAMA", name, req->nbytes))
-				data->notes[sequenceNumber] = Note_X_QueryExtension_Xinerama;
-			else
-			if (!strmemcmp("NV-GLX", name, req->nbytes))
-				data->notes[sequenceNumber] = Note_X_QueryExtension_NV_GLX;
-			else
-			if (!strmemcmp(ScreenSaverName, name, req->nbytes))
-				data->notes[sequenceNumber] = Note_X_QueryExtension_MIT_SCREEN_SAVER;
-			else
-				data->notes[sequenceNumber] = Note_X_QueryExtension_Other;
-			break;
-		}
-
-		case X_GrabPointer:
-			if (config.noMouseGrab)
-			{
-				log_debug("Clobbering X_GrabPointer event\n");
-				// Specify an obviously-invalid value
-				xGrabPointerReq* req = (xGrabPointerReq*)data->buf;
-				req->time = -1;
-			}
-			break;
-
-		case X_GrabKeyboard:
-			if (config.noKeyboardGrab)
-			{
-				log_debug("Clobbering X_GrabKeyboard event\n");
-				// Specify an obviously-invalid value
-				xGrabKeyboardReq* req = (xGrabKeyboardReq*)data->buf;
-				req->time = -1;
-			}
-			break;
-
-		case X_GetSelectionOwner:
-		{
-			if (config.noPrimarySelection)
-			{
-				xResourceReq* req = (xResourceReq*)data->buf;
-				log_debug(" Selection atom: %"PRIuCARD32"\n", req->id);
-				if (req->id == XA_PRIMARY)
-				{
-					req->id = XA_CUT_BUFFER0;
-					log_debug(" -> Replaced atom: %"PRIuCARD32"\n", req->id);
-				}
-			}
-			break;
-		}
 		case X_SetSelectionOwner:
 		{
 			if (config.noPrimarySelection)
@@ -1310,6 +1241,20 @@ static bool handleClientData(X11ConnData* data)
 				{
 					req->selection = XA_CUT_BUFFER1;
 					log_debug(" -> Replaced atom: %"PRIuCARD32"\n", req->selection);
+				}
+			}
+			break;
+		}
+		case X_GetSelectionOwner:
+		{
+			if (config.noPrimarySelection)
+			{
+				xResourceReq* req = (xResourceReq*)data->buf;
+				log_debug(" Selection atom: %"PRIuCARD32"\n", req->id);
+				if (req->id == XA_PRIMARY)
+				{
+					req->id = XA_CUT_BUFFER0;
+					log_debug(" -> Replaced atom: %"PRIuCARD32"\n", req->id);
 				}
 			}
 			break;
@@ -1328,6 +1273,7 @@ static bool handleClientData(X11ConnData* data)
 			}
 			break;
 		}
+
 		case X_SendEvent:
 		{
 			xSendEventReq* req = (xSendEventReq *)data->buf;
@@ -1358,6 +1304,62 @@ static bool handleClientData(X11ConnData* data)
 			}
 			break;
 		}
+
+		case X_GrabPointer:
+			if (config.noMouseGrab)
+			{
+				log_debug("Clobbering X_GrabPointer event\n");
+				// Specify an obviously-invalid value
+				xGrabPointerReq* req = (xGrabPointerReq*)data->buf;
+				req->time = -1;
+			}
+			break;
+
+		case X_UngrabPointer:
+		{
+			if (config.confineMouse)
+			{
+				log_debug2(" X_UngrabPointer: Stubbing client request\n");
+				req->reqType = X_NoOperation;
+			}
+			break;
+		}
+
+		case X_GrabKeyboard:
+			if (config.noKeyboardGrab)
+			{
+				log_debug("Clobbering X_GrabKeyboard event\n");
+				// Specify an obviously-invalid value
+				xGrabKeyboardReq* req = (xGrabKeyboardReq*)data->buf;
+				req->time = -1;
+			}
+			break;
+
+		case X_QueryExtension:
+		{
+			xQueryExtensionReq* req = (xQueryExtensionReq*)data->buf;
+			const char* name = (const char*)(data->buf + sz_xQueryExtensionReq);
+			log_debug2(" XQueryExtension(%.*s)\n", req->nbytes, name);
+
+			if (!strmemcmp("XFree86-VidModeExtension", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_XFree86_VidModeExtension;
+			else
+			if (!strmemcmp("RANDR", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_RANDR;
+			else
+			if (!strmemcmp("XINERAMA", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_Xinerama;
+			else
+			if (!strmemcmp("NV-GLX", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_NV_GLX;
+			else
+			if (!strmemcmp(ScreenSaverName, name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_MIT_SCREEN_SAVER;
+			else
+				data->notes[sequenceNumber] = Note_X_QueryExtension_Other;
+			break;
+		}
+
 		case X_ForceScreenSaver:
 		{
 			// XResetScreenSaver, used to periodically postpone the screen saver

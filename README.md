@@ -2,17 +2,21 @@
 
 Hackbrary to **H**ook and **A**ugment **X11** protocol calls.
 
-Attempts to fix game and full-screen application issues on Linux, such as:
+Allows customizing the behavior of and fix common annoyances of X11 applications:
+
+- exclusively grabbing the mouse or keyboard
+- forcibly pausing the game when the window loses focus
+- forcibly changing the screen resolution
+- not restricting the mouse cursor to its window/monitor
+
+Additionally, attempts to fix game and full-screen application issues on Linux, such as:
+
 - starting on the wrong monitor
 - spanning too many monitors
 - spanning one half of a tiled (MST) monitor (such as some 4K/5K/8K monitors)
 - refusing to allow selecting a desired resolution
 
-It can also work around some common annoyances:
-- exclusively grabbing the mouse or keyboard
-- forcibly pausing the game when the window loses focus
-- forcibly changing the screen resolution
-- not restricting the mouse cursor to its window/monitor
+See the [configuration](#configuration) section for more details.
 
 ## Building
 
@@ -153,6 +157,8 @@ and a 4K monitor in MST mode (thus presenting itself as two 1920x2160 panels) at
 The desired result (and solution listed to achieve said result) is to launch the game in full-screen on the 4K monitor,
 at 4K resolution if the game supports it.
 
+<details>
+
 Game                            | Status
 ------------------------------- | -----------------------------------------------
 10,000,000                      | Works (`MoveWindows` + `ResizeWindows`)
@@ -222,12 +228,4 @@ Voxatron                        | Works (`ResizeWindows`), though the KDE panel 
 VVVVVV                          | Works (not needed)
 World of Goo                    | Works (`MoveWindows` + `ResizeWindows`, then copy `.../World of Goo/properties/config.txt` to `~/.WorldOfGoo/config.txt` and set `screen_width`/`screen_height`)
 
-## License
-
-Copyright (c) 2015-2018 hax11 authors.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+</details>

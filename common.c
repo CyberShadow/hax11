@@ -352,7 +352,13 @@ static bool fixMonitor(INT16* x, INT16* y, CARD16 *width, CARD16 *height)
 
 	if (config.maskOtherMonitors)
 		if (*width != config.mainW || *height != config.mainH)
-			return false;
+		{
+			// return false;
+			*x = config.mainX;
+			*y = config.mainY;
+			*width = config.mainW;
+			*height = config.mainH;
+		}
 
 	return true;
 }
@@ -905,9 +911,13 @@ static bool handleClientData(X11ConnData* data)
 				ptr++;
 			}
 
-			log_debug2(" XConfigureWindow(%dx%d @ %dx%d)\n", *w, *h, *x, *y);
+			log_debug2(" XConfigureWindow(%dx%d @ %dx%d mask=0x%04X )\n", *w, *h, *x, *y, req->mask);
 			fixCoords(x, y, w, h);
 			log_debug2(" ->              (%dx%d @ %dx%d)\n", *w, *h, *x, *y);
+
+			if ((req->mask & 0x000C) == 0x000C && *w == 0 && *h == 0)
+				__builtin_trap();
+
 			break;
 		}
 

@@ -163,6 +163,7 @@ enum
 {
 	MAP_KIND_KEY,
 	MAP_KIND_BUTTON,
+	MAP_KIND_SHELL,
 };
 
 //typedef CARD8 KEYCODE;
@@ -170,7 +171,11 @@ enum
 struct MapInput
 {
 	unsigned char kind;
-	unsigned int code;
+	union
+	{
+		unsigned int code;
+		const char *str;
+	};
 };
 
 struct MapConfig
@@ -198,18 +203,24 @@ int parseInt(const char *s)
 
 bool parseInput(struct MapInput *input, const char *s)
 {
-	if (tolower(*s) == 'k')
-		input->kind = MAP_KIND_KEY;
-	else
-	if (tolower(*s) == 'b')
-		input->kind = MAP_KIND_BUTTON;
-	else
+	switch (tolower(*s))
 	{
-		log_error("Bad map kind: %s\n", s);
-		return false;
+		case 'k':
+			input->kind = MAP_KIND_KEY;
+			input->code = parseInt(s + 1);
+			return true;
+		case 'b':
+			input->kind = MAP_KIND_BUTTON;
+			input->code = parseInt(s + 1);
+			return true;
+		case 's':
+			input->kind = MAP_KIND_SHELL;
+			input->str = strdup(s + 1);
+			return true;
+		default:
+			log_error("Bad map kind: %s\n", s);
+			return false;
 	}
-	input->code = parseInt(s + 1);
-	return true;
 }
 
 static void readConfig(const char* fn)
@@ -1796,16 +1807,28 @@ static bool handleServerData(X11ConnData* data)
 					if (map->from.kind == kind && map->from.code == reply->event.u.u.detail)
 					{
 						static const char *kindNames[] = { "key", "button" };
-						log_debug("Mapping %s %u to %s %u\n",
-							kindNames[map->from.kind], map->from.code,
-							kindNames[map->to.kind], map->to.code);
+						if (map->to.kind == MAP_KIND_SHELL)
+						{
+							if (isPress)
+							{
+								int ret = system(map->to.str);
+								log_debug("Executed command '%s', return status %d\n",
+									map->to.str, ret);
+							}
+						}
+						else
+						{
+							log_debug("Mapping %s %u to %s %u\n",
+								kindNames[map->from.kind], map->from.code,
+								kindNames[map->to.kind], map->to.code);
 
-						xEvent injected = reply->event;
-						injected.u.u.type = isPress
-							? map->to.kind == MAP_KIND_BUTTON ? ButtonPress : KeyPress
-							: map->to.kind == MAP_KIND_BUTTON ? ButtonRelease : KeyRelease;
-						injected.u.u.detail = map->to.code;
-						injectEvent(data, &injected);
+							xEvent injected = reply->event;
+							injected.u.u.type = isPress
+								? map->to.kind == MAP_KIND_BUTTON ? ButtonPress : KeyPress
+								: map->to.kind == MAP_KIND_BUTTON ? ButtonRelease : KeyRelease;
+							injected.u.u.detail = map->to.code;
+							injectEvent(data, &injected);
+						}
 						found = true;
 					}
 

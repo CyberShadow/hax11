@@ -127,7 +127,7 @@ Enable=1
 
 ### Key / button mapping
 
-You can map a key or mouse button to one or more keys / mouse buttons using configuration lines in the form `Map` ( `K` | `B` ) *integer* `=` ( `K` | `B` ) *integer*.
+You can map a key or mouse button to one or more keys / mouse buttons using configuration lines in the form `Map` ( `K` | `B` ) *integer* `=` ( `K` | `B` ) *integer*, or run a shell command (see below).
 The integer is the key or button code, and can be found using e.g. the `xev` utility.
 Defining the same key or button on the left side of `=` allows mapping it to multiple keys / buttons.
 The original key / button event is suppressed. To include it, map the key / button to itself.
@@ -142,6 +142,14 @@ Example - making the left mouse button click also generate an F4 key press (in a
 ```
 MapB1=B1
 MapB1=K70
+```
+
+The right side can also be `S` followed by a shell command, which is run (via `system`) when the key or button is pressed.
+The program does not receive X events until the command exits, so append `&` to commands that take a while.
+
+Example - take a screenshot when F12 is pressed:
+```
+MapK96=Sscrot &
 ```
 
 ## Installation

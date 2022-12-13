@@ -76,6 +76,7 @@ Name                  | Values  | Description
 `NoWindowStackMove`   | `0`/`1` | Boolean - Disable moving windows through the window stack. Prevents moving windows to the top or bottom.
 `NoWMRaise`           | `0`/`1` | Boolean - Filter out `_NET_ACTIVE_WINDOW` requests, prevents asking the window manager to raise windows to the top. 
 `NoScreenSaverInhibit`| `0`/`1` | Boolean - Filter out `XScreenSaverSuspend` and `XResetScreenSaver` requests, preventing the program from keeping the screen from blanking.
+`OpenGLForceVSyncOff` | `0`/`1` | Boolean - Ignore the program's attempts to set the swap interval (vertical sync) via `glXSwapIntervalEXT`, so the driver default applies.
 `FakeScreenW`/`H`     | Integer | Fake the reported resolution of all X11 screens to the application on X11 handshake. Active when non zero
 `FakeScreenDimW`/`H`  | Integer | Fake the reported dimensions in millimeters of all X11 screens to the application on X11 handshake. Active when non zero
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)

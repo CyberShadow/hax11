@@ -173,3 +173,23 @@ int connect(int socket, const struct sockaddr *address,
 	}
 	return connect_result;
 }
+
+#define LIBGL_SO "/usr/lib/libGL.so"
+
+static void* libGL = NULL;
+
+static void glXSwapIntervalEXT(
+	__attribute__((unused)) /*Display*/void *dpy,
+	__attribute__((unused)) /*GLXDrawable*/XID drawable,
+	__attribute__((unused)) int interval)
+{
+	log_debug("Stubbed: glXSwapIntervalEXT(%p, 0x%lx, %d)\n", dpy, drawable, interval);
+}
+
+void *glXGetProcAddressARB(const /*GLubyte*/char *procName)
+{
+	log_debug("glXGetProcAddressARB(%s)\n", procName);
+	if (strcmp(procName, "glXSwapIntervalEXT") == 0 && config.openGLForceVSyncOff)
+		return &glXSwapIntervalEXT;
+	return NEXT(libGL, LIBGL_SO, glXGetProcAddressARB)(procName);
+}

@@ -61,7 +61,7 @@ Name                  | Values  | Description
 `Enable`              | `0`/`1` | Boolean - Intercept the X11 connection (required for any other settings to have any effect)
 `JoinMST`             | `0`/`1` | Boolean - For monitors which present each half as one MST panel, join them and present them as one monitor to the application
 `MaskOtherMonitors`   | `0`/`1` | Boolean - Whether to hide the presence of other monitors from the application
-`ResizeWindows`       | `0`/`1` | Boolean - Whether to forcibly change the size of windows that span too many monitors
+`ResizeWindows`       | `0`/`1` | Boolean - Whether to forcibly change the size of windows whose width is equal to `DesktopW`
 `ResizeAll`           | `0`/`1` | Boolean - Resize (stretch) all windows, not just those matching the size of one MST panel
 `MoveWindows`         | `0`/`1` | Boolean - Whether to forcibly move windows created at (0,0) to the primary monitor
 `Fork`                | `0`/`1` | Boolean - Move processing to a separate forked process.

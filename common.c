@@ -749,6 +749,38 @@ enum
 	Note_NV_GLX,
 };
 
+// definition stolen from libX11/src/Xatomtype.h
+typedef struct {
+    CARD32 flags;
+    CARD32 x, y, width, height;
+    CARD32 minWidth, minHeight;
+    CARD32 maxWidth, maxHeight;
+    CARD32 widthInc, heightInc;
+    CARD32 minAspectX, minAspectY;
+    CARD32 maxAspectX, maxAspectY;
+    CARD32 baseWidth,baseHeight;
+    CARD32 winGravity;
+} xPropSizeHints;
+
+static void debugPropSizeHints(xPropSizeHints* hints) {
+	log_debug2(
+		"PropSizeHints: flags=0x%"PRIxCARD32" pos=%"PRIuCARD32"x%"PRIuCARD32" size=%"PRIuCARD32"x%"PRIuCARD32
+		" min_size=%"PRIuCARD32"x%"PRIuCARD32" base_size=%"PRIuCARD32"x%"PRIuCARD32
+		" max_size=%"PRIuCARD32"x%"PRIuCARD32" size_inc=%"PRIuCARD32"x%"PRIuCARD32
+		" min_aspect=%"PRIuCARD32"x%"PRIuCARD32" max_aspect=%"PRIuCARD32"x%"PRIuCARD32" win_gravity=%"PRIuCARD32"\n",
+		hints->flags,
+		hints->x, hints->y,
+		hints->width, hints->height,
+		hints->minWidth, hints->minHeight,
+		hints->baseWidth, hints->baseHeight,
+		hints->maxWidth, hints->maxHeight,
+		hints->widthInc, hints->heightInc,
+		hints->minAspectX, hints->minAspectY,
+		hints->maxAspectX, hints->maxAspectY,
+		hints->winGravity
+	);
+}
+
 static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 {
 	struct Connection conn = {};
@@ -944,10 +976,14 @@ static bool handleClientData(X11ConnData* data)
 			log_debug2(" XChangeProperty: property=%"PRIuCARD32" type=%"PRIuCARD32" format=%d)\n", req->property, req->type, req->format);
 			if (req->type == XA_WM_SIZE_HINTS)
 			{
-				XSizeHints* hints = (XSizeHints*)(data->buf + sz_xChangePropertyReq);
+				xPropSizeHints* hints = (xPropSizeHints*)(data->buf + sz_xChangePropertyReq);
+
+				debugPropSizeHints(hints);
 				fixCoords((INT16*)&hints->x, (INT16*)&hints->y, (CARD16*)&hints->width, (CARD16*)&hints->height);
-				fixSize((CARD16*)&hints->max_width, (CARD16*)&hints->max_height);
-				fixSize((CARD16*)&hints->base_width, (CARD16*)&hints->base_height);
+
+				fixSize((CARD16*)&hints->maxWidth, (CARD16*)&hints->maxHeight);
+				fixSize((CARD16*)&hints->baseWidth, (CARD16*)&hints->baseHeight);
+				debugPropSizeHints(hints);
 			}
 			break;
 		}

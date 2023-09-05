@@ -124,6 +124,8 @@ struct Config
 	char noMouseGrab;
 	char noKeyboardGrab;
 	char noPrimarySelection;
+	char noMinSize;
+	char noMaxSize;
 	char dumb; // undocumented - act as a dumb pipe, nothing more
 	char confineMouse;
 	char noResolutionChange;
@@ -241,6 +243,8 @@ static void readConfig(const char* fn)
 		PARSE_INT(noMouseGrab)
 		PARSE_INT(noKeyboardGrab)
 		PARSE_INT(noPrimarySelection)
+		PARSE_INT(noMinSize)
+		PARSE_INT(noMaxSize)
 		PARSE_INT(dumb)
 		PARSE_INT(confineMouse)
 		PARSE_INT(noResolutionChange)
@@ -983,6 +987,16 @@ static bool handleClientData(X11ConnData* data)
 
 				fixSize((CARD16*)&hints->maxWidth, (CARD16*)&hints->maxHeight);
 				fixSize((CARD16*)&hints->baseWidth, (CARD16*)&hints->baseHeight);
+				if (config.noMinSize) {
+					hints->flags &= ~PMinSize;
+					hints->minWidth = 0;
+					hints->minHeight = 0;
+				}
+				if (config.noMaxSize) {
+					hints->flags &= ~PMaxSize;
+					hints->maxWidth = 0;
+					hints->maxHeight = 0;
+				}
 				debugPropSizeHints(hints);
 			}
 			break;

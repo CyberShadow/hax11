@@ -71,6 +71,8 @@ Name                  | Values  | Description
 `ConfineMouse`        | `0`/`1` | Boolean - Confine the mouse to the program's window while it is focused. Focus must then be changed with the keyboard.
 `NoPrimarySelection`  | `0`/`1` | Boolean - Disable getting (pasting) or setting (copying) the `PRIMARY` X selection (usually done by middle clicks).
 `NoResolutionChange`  | `0`/`1` | Boolean - Disable setting screen resolution.
+`NoMinSize`           | `0`/`1` | Boolean - Disable minimum window size restriction.
+`NoMaxSize`           | `0`/`1` | Boolean - Disable maximum window size restriction.
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
 `MainW`/`H`           | Integer | The resolution of your primary monitor (or total resolution of monitors to be used for games)
 `DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)

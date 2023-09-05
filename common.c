@@ -299,9 +299,6 @@ static void fixSize(
 	CARD16* width,
 	CARD16* height)
 {
-	if (!config.resizeWindows)
-		return;
-
 	if (config.resizeAll && *width >= 640 && *height >= 480)
 	{
 		*width = config.mainW;
@@ -309,7 +306,7 @@ static void fixSize(
 	}
 
 	// Fix windows spanning multiple monitors
-	if (*width == config.desktopW)
+	if (config.resizeWindows && *width == config.desktopW)
 		*width = config.mainW;
 
 	// Fix spanning one half of a MST monitor

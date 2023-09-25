@@ -19,8 +19,7 @@
 
 #include <X11/Xproto.h>
 #include <X11/Xatom.h>
-#include <X11/Xutil.h>
-#include <X11/extensions/xf86vmode.h>
+#include <X11/X.h>
 #include <X11/extensions/xf86vmproto.h>
 #include <X11/extensions/randr.h>
 #include <X11/extensions/randrproto.h>
@@ -762,6 +761,9 @@ typedef struct {
     CARD32 baseWidth,baseHeight;
     CARD32 winGravity;
 } xPropSizeHints;
+
+#define PMinSize	(1L << 4) /* program specified minimum size */
+#define PMaxSize	(1L << 5) /* program specified maximum size */
 
 static void debugPropSizeHints(xPropSizeHints* hints) {
 	log_debug2(

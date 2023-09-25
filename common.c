@@ -752,13 +752,13 @@ enum
 // definition stolen from libX11/src/Xatomtype.h
 typedef struct {
     CARD32 flags;
-    CARD32 x, y, width, height;
-    CARD32 minWidth, minHeight;
-    CARD32 maxWidth, maxHeight;
-    CARD32 widthInc, heightInc;
-    CARD32 minAspectX, minAspectY;
-    CARD32 maxAspectX, maxAspectY;
-    CARD32 baseWidth,baseHeight;
+    INT32 x, y, width, height;
+    INT32 minWidth, minHeight;
+    INT32 maxWidth, maxHeight;
+    INT32 widthInc, heightInc;
+    INT32 minAspectX, minAspectY;
+    INT32 maxAspectX, maxAspectY;
+    INT32 baseWidth,baseHeight;
     CARD32 winGravity;
 } xPropSizeHints;
 

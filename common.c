@@ -643,13 +643,16 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	"NoOperation",
+	"NoOperation", // 127
+	// from this point on the opcodes are dynamically assigned to extensions.
+	// you can see their names with "xdpyinfo -queryExt | grep opcode"
+	// https://www.x.org/wiki/Development/Documentation/Protocol/OpCodes/
 	NULL,
 };
 
 static const char *responseNames[256] =
 {
-	"Error",
+	"Error", // 0
 	"Reply",
 	"KeyPress",
 	"KeyRelease",
@@ -685,7 +688,10 @@ static const char *responseNames[256] =
 	"ClientMessage",
 	"MappingNotify",
 	"GenericEvent",
-	NULL,
+	NULL, // 36
+	// 64-127 are dynamically assigned to extensions
+	// 128-255 are events originating from a SendEvent request
+	// https://www.x.org/releases/current/doc/xproto/x11protocol.html#event_format
 };
 
 static const char* focusModes[] = {
@@ -811,6 +817,45 @@ static void debugPropSizeHints(xPropSizeHints* hints) {
 	);
 }
 
+static void logXReply(X11ConnData *data, const char* name, const xReply* reply, size_t length)
+{
+
+	// https://www.x.org/releases/current/doc/xproto/x11protocol.html#event_format
+	// Event codes 64 through 127 are reserved for extensions
+	bool isDynamicOp = (reply->generic.type & 0x40) != 0;
+	// The most significant bit in this code is set if the event was generated from a SendEvent request
+	bool isOriginSendEvent = (reply->generic.type & 0x80) != 0;
+
+	const char* responseName = isDynamicOp ? "*DYN_OP*" : responseNames[reply->generic.type & 0x7f];
+
+	if (isOriginSendEvent)
+	{
+		log_debug2(" [%d][%d] %s from SendEvent: %d (%s) length=%zu\n",
+				   data->index, reply->generic.sequenceNumber, name,
+				   reply->generic.type & 0x7f, responseName, length);
+	}
+	else
+	{
+		log_debug2(" [%d][%d] %s: %d (%s) length=%zu\n",
+				   data->index, reply->generic.sequenceNumber, name,
+				   reply->generic.type, responseName, length);
+	}
+}
+
+static void logXReq(X11ConnData *data, const char* name, const xReq* req, size_t length, CARD16 sequenceNumber)
+{
+	// https://www.x.org/releases/current/doc/xproto/x11protocol.html#request_format
+	// Major opcodes 128 through 255 are reserved for extensions
+	bool isDynamicOp = (req->reqType & 0x80) != 0;
+
+	// TODO: catch those dynamic opcode names
+	const char* reqName = isDynamicOp ? "*DYN_OP*" : requestNames[req->reqType & 0x7f];
+
+	log_debug2("[%d][%d] %s: %d (%s) with data %d, length=%zu\n",
+			   data->index, sequenceNumber, name, req->reqType, reqName, req->data, length);
+	/* log_debug2("  [server: %d] <- [client: %d]\n", sequenceNumber, sequenceNumber - data->serialDelta); */
+}
+
 static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 {
 	struct Connection conn = {};
@@ -822,7 +867,7 @@ static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 	sendAll(&conn, req, size);
 	CARD16 sequenceNumber = ++data->serial;
 	data->skip[sequenceNumber] = true;
-	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %zu\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
+	logXReq(data, "Injected request", req, size, sequenceNumber);
 	return sequenceNumber;
 }
 
@@ -837,8 +882,7 @@ static CARD16 injectReply(X11ConnData *data, void* buf, size_t size)
 	reply->generic.sequenceNumber = data->serial - data->serialDelta--;
 	reply->generic.length = ((size < sz_xReply ? sz_xReply : size) - sz_xReply + 3) / 4;
 	sendAll(&conn, reply, size);
-	log_debug2("[%d][%d] Injected reply %d (%s) with data %d, length %zu\n",
-		data->index, reply->generic.sequenceNumber, reply->generic.type, responseNames[reply->generic.type], reply->generic.data1, size);
+	logXReply(data, "Injected reply", reply, size);
 	return reply->generic.sequenceNumber;
 }
 
@@ -848,10 +892,9 @@ static void injectEvent(X11ConnData *data, xEvent* event)
 	conn.recvfd = data->server;
 	conn.sendfd = data->client;
 	conn.dir = '}';
-
-	sendAll(&conn, event, sizeof(xEvent));
-	log_debug2("[%d] Injected event %d (%s) with data %d\n",
-		data->index, event->u.u.type, responseNames[event->u.u.type], event->u.u.detail);
+	size_t size = sizeof(xEvent);
+	sendAll(&conn, event, size);
+	logXReply(data, "Injected event", (const xReply *) event, size);
 }
 
 static void grabPointer(X11ConnData* data, Window window)
@@ -919,8 +962,8 @@ static bool handleClientData(X11ConnData* data)
 		ofs += 4;
 	}
 	CARD16 sequenceNumber = ++data->serial;
-	log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
-	/* log_debug2("  [server: %d] <- [client: %d]\n", sequenceNumber, sequenceNumber - data->serialDelta); */
+	logXReq(data, "Request", req, requestLength, sequenceNumber);
+
 	bufSize(&data->buf, &data->bufLen, requestLength);
 	req = (xReq*)data->buf; // in case bufSize moved buf
 
@@ -1256,8 +1299,7 @@ static bool handleServerData(X11ConnData* data)
 		if (!recvAll(&conn, data->buf+ofs, dataLength)) return false;
 		ofs += dataLength;
 	}
-	log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%zu\n",
-		data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
+	logXReply(data, "Response", reply, ofs);
 
 	bool serialIsValid = true;
 

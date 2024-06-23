@@ -753,6 +753,9 @@ typedef struct
 	unsigned char opcode_Xinerama;
 	unsigned char opcode_NV_GLX;
 
+	/// Learned atoms, as returned by InternAtom
+	CARD32 atom__NET_ACTIVE_WINDOW;
+
 	/// Reply serial tracking and correction
 	CARD16 serial; // The serial of the last sent request (as seen by the server)
 	CARD16 serialLast; // The serial of the last received reply
@@ -765,6 +768,7 @@ enum
 {
 	Note_None,
 	Note_X_GetGeometry,
+	Note_X_InternAtom__NET_ACTIVE_WINDOW,
 	Note_X_InternAtom_Other,
 	Note_X_QueryExtension_XFree86_VidModeExtension,
 	Note_X_QueryExtension_RANDR,
@@ -1039,7 +1043,10 @@ static bool handleClientData(X11ConnData* data)
 			xInternAtomReq* req = (xInternAtomReq*)data->buf;
 			const char* name = (const char*)(data->buf + sz_xInternAtomReq);
 			log_debug2(" XInternAtom: %.*s\n", req->nbytes, name);
-			data->notes[sequenceNumber] = Note_X_InternAtom_Other;
+			if (!strmemcmp("_NET_ACTIVE_WINDOW", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_InternAtom__NET_ACTIVE_WINDOW;
+			else
+				data->notes[sequenceNumber] = Note_X_InternAtom_Other;
 			break;
 		}
 
@@ -1165,7 +1172,55 @@ static bool handleClientData(X11ConnData* data)
 			}
 			break;
 		}
+		case X_SendEvent:
+		{
+			xSendEventReq* req = (xSendEventReq *)data->buf;
+			log_debug2(" XSendEvent: propagate=%d window=%"PRIuCARD32" event-mask=%"PRIxCARD32" event=%d (%s)\n",
+					   req->propagate, req->destination, req->eventMask, req->event.u.u.type, responseNames[req->event.u.u.type]);
+			if (req->event.u.u.type == ClientMessage)
+			{
+				CARD32 type = req->event.u.clientMessage.u.b.type;
+				CARD32 subject_window = req->event.u.clientMessage.window;
+				log_debug2(" -> ClientMessage: window=%"PRIuCARD32" type=%"PRIuCARD32" format=%d bit data:\n",
+						   subject_window, type, req->event.u.u.detail);
+				hexDump(req->event.u.clientMessage.u.b.bytes, 20, ' ', ' ');
+				// This is a request to the window manager to make window active.
+				// https://specifications.freedesktop.org/wm-spec/1.3/ar01s03.html
+				if (type == data->atom__NET_ACTIVE_WINDOW)
+				{
+					log_debug2("    _NET_ACTIVE_WINDOW: source=%"PRIuCARD32" timestamp=%"PRIuCARD32
+					           " requestors_active_window=%"PRIuCARD32"\n",
+							   req->event.u.clientMessage.u.l.longs0, req->event.u.clientMessage.u.l.longs1,
+							   req->event.u.clientMessage.u.l.longs2);
 
+					// code bellow crashes portal 2 (sdl2 application) when active.
+					// I think SDL_RaiseWindow somehow waits for a response and times out.
+#if 0
+					log_debug("Clobbering XSendEvent atom _NET_ACTIVE_WINDOW\n");
+					// according to spec, we shouldn't send this unless client requests StructureNotify or SubstructureNotify,
+					// but I don't want to figure out how to get that value.
+					xEvent reply = {0};
+					reply.u.u.type = ConfigureNotify | 0x80; // highest bit set means it's a XSendEvent reply
+					reply.u.u.sequenceNumber = sequenceNumber;
+					// TODO: .event might be the window that sent the request? figure this out.
+					// most of those values are taken from portal 2 and could be better, but it's hard to get them.
+					reply.u.configureNotify.event = subject_window;
+					reply.u.configureNotify.window = subject_window;
+					reply.u.configureNotify.aboveSibling = 0; // not going to bother
+					reply.u.configureNotify.x = (INT16) config.mainX;
+					reply.u.configureNotify.y = (INT16) config.mainY;
+					reply.u.configureNotify.width = (CARD16) config.mainW;
+					reply.u.configureNotify.height = (CARD16) config.mainH;
+					reply.u.configureNotify.borderWidth = 0;
+					reply.u.configureNotify.override = false;
+
+					injectEvent(data, &reply);
+					return true;
+#endif
+				}
+			}
+			break;
+		}
 		case 0:
 			break;
 
@@ -1323,6 +1378,14 @@ static bool handleServerData(X11ConnData* data)
 					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
 					fixCoords(&r->x, &r->y, &r->width, &r->height);
 					log_debug2("  ->          (%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
+					break;
+				}
+
+				case Note_X_InternAtom__NET_ACTIVE_WINDOW:
+				{
+					xInternAtomReply* r = &reply->atom;
+					log_debug2("  X_InternAtom: (_NET_ACTIVE_WINDOW) atom=%"PRIuCARD32"\n", r->atom);
+					data->atom__NET_ACTIVE_WINDOW = r->atom;
 					break;
 				}
 

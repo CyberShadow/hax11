@@ -156,6 +156,11 @@ struct Config
 	char confineMouse;
 	char noResolutionChange;
 
+	unsigned int fakeScreenW;
+	unsigned int fakeScreenH;
+	unsigned int fakeScreenDimW;
+	unsigned int fakeScreenDimH;
+
 	struct MapConfig *maps;
 };
 
@@ -274,6 +279,11 @@ static void readConfig(const char* fn)
 		PARSE_INT(dumb)
 		PARSE_INT(confineMouse)
 		PARSE_INT(noResolutionChange)
+
+		PARSE_INT(fakeScreenW)
+		PARSE_INT(fakeScreenH)
+		PARSE_INT(fakeScreenDimW)
+		PARSE_INT(fakeScreenDimH)
 
 		/* else */
 			log_error("Unknown option: %s\n", buf);
@@ -918,6 +928,52 @@ static void grabPointer(X11ConnData* data, Window window)
 	data->notes[serial] = Note_X_GrabPointer;
 }
 
+static void X11Handshake(void* buf)
+{
+	xConnSetup* c = (xConnSetup *)buf;
+	log_debug2(" xConnSetup vendor='%.*s' numRoots=%d numFormats=%d\n",
+			   c->nbytesVendor, (char*) buf + sz_xConnSetup, c->numRoots, c->numFormats);
+
+	// fakeScreenResolution
+	if (config.fakeScreenW <= 0
+	&& config.fakeScreenH <= 0
+	&& config.fakeScreenDimW <= 0
+	&& config.fakeScreenDimH <= 0)
+		return;
+	// vendor length is padded to 4 bytes
+	// https://github.com/mirror/libX11/blob/ff8706a5eae25b8bafce300527079f68a201d27f/src/OpenDis.c#L311-L336
+	xWindowRoot* root = (xWindowRoot *)(buf + sz_xConnSetup
+									 + pad(c->nbytesVendor)
+									 + sz_xPixmapFormat * c->numFormats);
+	// FIXME: buffer overflow could be possible here with malformed packets.
+	for (int i = 0; i < c->numRoots; ++i)
+	{
+		log_debug2(" xWindowRoot #%d (%dx%d %dmmx%dmm)\n",
+				   i, root->pixWidth, root->pixHeight, root->mmWidth, root->mmHeight);
+		if (config.fakeScreenW > 0)
+			root->pixWidth = config.fakeScreenW;
+		if (config.fakeScreenH > 0)
+			root->pixHeight = config.fakeScreenH;
+
+		if (config.fakeScreenDimW > 0)
+			root->mmWidth = config.fakeScreenDimW;
+		if (config.fakeScreenDimH > 0)
+			root->mmHeight = config.fakeScreenDimH;
+
+		log_debug2(" ->             (%dx%d %dmmx%dmm)\n",
+				   root->pixWidth, root->pixHeight, root->mmWidth, root->mmHeight);
+		// now skip to the next root
+		// after each root there are nDepths of xDepth
+		for (int j = 0; j < root->nDepths; ++j) {
+			xDepth *depth = (xDepth*) root;
+			// after each xDepth there are nVisuals of xVisualType.
+			root = (void *)(root) + sz_xDepth + depth->nVisuals * sz_xVisualType;
+		}
+		// now we should hopefully be at the next root.
+		// TODO: i didn't test this.
+	}
+}
+
 static bool handleClientData(X11ConnData* data)
 {
 	struct Connection conn = {};
@@ -1336,6 +1392,7 @@ static bool handleServerData(X11ConnData* data)
 		size_t dataLength = header.length * 4;
 		bufSize(&data->buf, &data->bufLen, dataLength);
 		if (!recvAll(&conn, data->buf, dataLength)) return false;
+		X11Handshake(data->buf);
 		if (!sendAll(&conn, data->buf, dataLength)) return false;
 
 		data->serverInitialized = true;

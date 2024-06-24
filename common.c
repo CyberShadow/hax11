@@ -941,7 +941,7 @@ static void grabPointer(X11ConnData* data, Window window)
 	data->notes[serial] = Note_X_GrabPointer;
 }
 
-static void X11Handshake(void* buf, size_t length)
+static void handleServerHandshake(void* buf, size_t length)
 {
 	size_t usedbytes = sz_xConnSetup;
 	if (length < usedbytes)
@@ -955,10 +955,10 @@ static void X11Handshake(void* buf, size_t length)
 			   c->nbytesVendor, (char*) buf, c->numRoots, c->numFormats);
 
 	// fakeScreenResolution
-	if (config.fakeScreenW <= 0
-	&& config.fakeScreenH <= 0
-	&& config.fakeScreenDimW <= 0
-	&& config.fakeScreenDimH <= 0)
+	if (config.fakeScreenW == 0
+	&& config.fakeScreenH == 0
+	&& config.fakeScreenDimW == 0
+	&& config.fakeScreenDimH == 0)
 		return;
 	// vendor length is padded to 4 bytes
 	// https://github.com/mirror/libX11/blob/ff8706a5eae25b8bafce300527079f68a201d27f/src/OpenDis.c#L311-L336
@@ -1021,7 +1021,7 @@ static void X11Handshake(void* buf, size_t length)
 	}
 	if (length != usedbytes)
 	{
-		log_debug2("X11Handshake length != usedbytes %zu != %zu. This could be a sign of a bug in code.\n",
+		log_debug2("handleServerHandshake length != usedbytes %zu != %zu. This could be a sign of a bug in code.\n",
 				   length, usedbytes);
 	}
 }
@@ -1141,7 +1141,7 @@ static bool handleClientData(X11ConnData* data)
 					req->mask, bm[0], bm[1], bm[2], bm[3], bm[4], bm[5], bm[6]
 			);
 
-			if (config.noWindowStackMove && req->mask & CWStackMode) {
+			if (config.noWindowStackMove && (req->mask & CWStackMode)) {
 				req->mask &= ~CWStackMode;
 				bm[6] = "";
 				requestLength -= 4;
@@ -1451,7 +1451,7 @@ static bool handleServerData(X11ConnData* data)
 		size_t dataLength = header.length * 4;
 		bufSize(&data->buf, &data->bufLen, dataLength);
 		if (!recvAll(&conn, data->buf, dataLength)) return false;
-		X11Handshake(data->buf, dataLength);
+		handleServerHandshake(data->buf, dataLength);
 		if (!sendAll(&conn, data->buf, dataLength)) return false;
 
 		data->serverInitialized = true;

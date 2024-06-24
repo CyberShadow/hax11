@@ -156,6 +156,7 @@ struct Config
 	char confineMouse;
 	char noResolutionChange;
 	char noWindowStackMove;
+	char noWMRaise;
 
 	unsigned int fakeScreenW;
 	unsigned int fakeScreenH;
@@ -281,6 +282,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(confineMouse)
 		PARSE_INT(noResolutionChange)
 		PARSE_INT(noWindowStackMove)
+		PARSE_INT(noWMRaise)
 
 		PARSE_INT(fakeScreenW)
 		PARSE_INT(fakeScreenH)
@@ -1315,31 +1317,12 @@ static bool handleClientData(X11ConnData* data)
 					           " requestors_active_window=%"PRIuCARD32"\n",
 							   req->event.u.clientMessage.u.l.longs0, req->event.u.clientMessage.u.l.longs1,
 							   req->event.u.clientMessage.u.l.longs2);
-
-					// code bellow crashes portal 2 (sdl2 application) when active.
-					// I think SDL_RaiseWindow somehow waits for a response and times out.
-#if 0
-					log_debug("Clobbering XSendEvent atom _NET_ACTIVE_WINDOW\n");
-					// according to spec, we shouldn't send this unless client requests StructureNotify or SubstructureNotify,
-					// but I don't want to figure out how to get that value.
-					xEvent reply = {0};
-					reply.u.u.type = ConfigureNotify | 0x80; // highest bit set means it's a XSendEvent reply
-					reply.u.u.sequenceNumber = sequenceNumber;
-					// TODO: .event might be the window that sent the request? figure this out.
-					// most of those values are taken from portal 2 and could be better, but it's hard to get them.
-					reply.u.configureNotify.event = subject_window;
-					reply.u.configureNotify.window = subject_window;
-					reply.u.configureNotify.aboveSibling = 0; // not going to bother
-					reply.u.configureNotify.x = (INT16) config.mainX;
-					reply.u.configureNotify.y = (INT16) config.mainY;
-					reply.u.configureNotify.width = (CARD16) config.mainW;
-					reply.u.configureNotify.height = (CARD16) config.mainH;
-					reply.u.configureNotify.borderWidth = 0;
-					reply.u.configureNotify.override = false;
-
-					injectEvent(data, &reply);
-					return true;
-#endif
+					if (config.noWMRaise)
+					{
+						log_debug2("    _NET_ACTIVE_WINDOW: Stubbing client request\n");
+						req->reqType=X_NoOperation;
+						// TODO: drop the packet instead?
+					}
 				}
 			}
 			break;

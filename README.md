@@ -73,6 +73,7 @@ Name                  | Values  | Description
 `NoResolutionChange`  | `0`/`1` | Boolean - Disable setting screen resolution.
 `NoMinSize`           | `0`/`1` | Boolean - Disable minimum window size restriction.
 `NoMaxSize`           | `0`/`1` | Boolean - Disable maximum window size restriction.
+`NoWindowStackMove`   | `0`/`1` | Boolean - Disable moving windows through the window stack. Prevents moving windows to the top or bottom.
 `FakeScreenW`/`H`     | Integer | Fake the reported resolution of all X11 screens to the application on X11 handshake. Active when non zero
 `FakeScreenDimW`/`H`  | Integer | Fake the reported dimensions in millimeters of all X11 screens to the application on X11 handshake. Active when non zero
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)

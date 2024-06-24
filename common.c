@@ -155,6 +155,7 @@ struct Config
 	char dumb; // undocumented - act as a dumb pipe, nothing more
 	char confineMouse;
 	char noResolutionChange;
+	char noWindowStackMove;
 
 	unsigned int fakeScreenW;
 	unsigned int fakeScreenH;
@@ -279,6 +280,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(dumb)
 		PARSE_INT(confineMouse)
 		PARSE_INT(noResolutionChange)
+		PARSE_INT(noWindowStackMove)
 
 		PARSE_INT(fakeScreenW)
 		PARSE_INT(fakeScreenH)
@@ -1087,37 +1089,63 @@ static bool handleClientData(X11ConnData* data)
 		{
 			xConfigureWindowReq* req = (xConfigureWindowReq*)data->buf;
 
-			INT16 dummyXY = 0;
-			CARD16 dummyW = config.mainW;
-			CARD16 dummyH = config.mainH;
-			INT16 *x = &dummyXY, *y = &dummyXY;
+			INT16 dummyX = 0, dummyY = 0;
+			CARD16 dummyW = config.mainW, dummyH = config.mainH;
+			CARD16 dummyBorder = 0;
+			CARD32 dummySibling = 0;
+			CARD8 dummyStackMode = 0;
+
+			INT16 *x = &dummyX, *y = &dummyY;
 			CARD16 *w = &dummyW, *h = &dummyH;
+			CARD16 *border = &dummyBorder;
+			CARD32 *sibling = &dummySibling;
+			CARD8 *stackMode = &dummyStackMode;
 
-			int* ptr = (int*)(data->buf + sz_xConfigureWindowReq);
-			if (req->mask & CWX)
-			{
-				x = (INT16*)ptr;
-				ptr++;
-			}
-			if (req->mask & CWY)
-			{
-				y = (INT16*)ptr;
-				ptr++;
-			}
-			if (req->mask & CWWidth)
-			{
-				w = (CARD16*)ptr;
-				ptr++;
-			}
-			if (req->mask & CWHeight)
-			{
-				h = (CARD16*)ptr;
-				ptr++;
+			// an ugly hack for a pretty log :(
+			const char* bm[7] = { "" , "", "", "", "", "", ""};
+			// for the macro.
+			INT32* _ptr = (INT32*)(data->buf + sz_xConfigureWindowReq);
+			const char** _bm = bm;
+			#define GET_VALUE_PTR_MASKED(m, type, ret) \
+				if(req->mask & m) \
+				{ \
+					ret = (type*) _ptr; \
+					_ptr++; \
+					*_bm = #m " "; \
+				} \
+				_bm++;
+			GET_VALUE_PTR_MASKED(CWX, INT16, x);
+			GET_VALUE_PTR_MASKED(CWY, INT16, y);
+			GET_VALUE_PTR_MASKED(CWWidth, CARD16, w);
+			GET_VALUE_PTR_MASKED(CWHeight, CARD16, h);
+			GET_VALUE_PTR_MASKED(CWBorderWidth, CARD16, border);
+			GET_VALUE_PTR_MASKED(CWSibling, CARD32, sibling);
+			GET_VALUE_PTR_MASKED(CWStackMode, CARD8, stackMode);
+			#undef GET_VALUE_PTR_MASKED
+
+			log_debug2(
+					" XConfigureWindow(%dx%d @ %dx%d border=%d sibling=%"PRIuCARD32" stackMode=%d"
+					" mask=0x%04X ( %s%s%s%s%s%s%s) )\n",
+					*w, *h, *x, *y, *border, *sibling, *stackMode,
+					req->mask, bm[0], bm[1], bm[2], bm[3], bm[4], bm[5], bm[6]
+			);
+
+			if (config.noWindowStackMove && req->mask & CWStackMode) {
+				req->mask &= ~CWStackMode;
+				bm[6] = "";
+				requestLength -= 4;
+				if (req->length) // Big Requests Extension
+					req->length -= 1;
+				// TODO: possibly drop packets with an empty mask?
 			}
 
-			log_debug2(" XConfigureWindow(%dx%d @ %dx%d mask=0x%04X )\n", *w, *h, *x, *y, req->mask);
 			fixCoords(x, y, w, h);
-			log_debug2(" ->              (%dx%d @ %dx%d)\n", *w, *h, *x, *y);
+			log_debug2(
+					" XConfigureWindow(%dx%d @ %dx%d border=%d sibling=%"PRIuCARD32" stackMode=%d"
+					" mask=0x%04X ( %s%s%s%s%s%s%s) )\n",
+					*w, *h, *x, *y, *border, *sibling, *stackMode,
+					req->mask, bm[0], bm[1], bm[2], bm[3], bm[4], bm[5], bm[6]
+			);
 
 			if ((req->mask & (CWWidth | CWHeight)) == (CWWidth | CWHeight) && *w == 0 && *h == 0)
 				__builtin_trap();

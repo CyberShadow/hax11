@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <poll.h>
 #include <inttypes.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include <gnu/lib-names.h>
 
@@ -30,6 +32,31 @@
 static void log_error(const char *fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
+
+static const char* get_curtime_string()
+{
+	// This will invalidate previous return pointer on the next call.
+	// Doesn't really matter for us, since we're using it immediately.
+	static char buffer[40];
+
+	// https://stackoverflow.com/a/32983646
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	int millisec = tv.tv_usec/1000;
+	if (millisec>=1000) { // Allow for rounding up to nearest second
+		millisec -=1000;
+		tv.tv_sec++;
+	}
+
+	struct tm* tm_info = localtime(&tv.tv_sec);
+
+	// https://stackoverflow.com/a/2023961
+	size_t len = strftime(buffer, 26, "%Y:%m:%d %H:%M:%S", tm_info);
+	sprintf(buffer+len, ".%03d", millisec);
+	return buffer;
+}
+
 static void log_error(const char *fmt, ...)
 {
 	va_list args;
@@ -41,7 +68,7 @@ static void log_error(const char *fmt, ...)
 	FILE* f = fopen("/tmp/hax11.log", "ab");
 	if (f)
 	{
-		fprintf(f, "[%d] ", getpid());
+		fprintf(f, "%s [%d] ", get_curtime_string(), getpid());
 		va_start(args, fmt);
 		vfprintf(f, fmt, args);
 		va_end(args);

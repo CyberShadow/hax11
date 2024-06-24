@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <poll.h>
 #include <inttypes.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include <gnu/lib-names.h>
 
@@ -27,21 +29,107 @@
 
 // ****************************************************************************
 
+struct Config
+{
+	int mainX;
+	int mainY;
+	unsigned int mainW;
+	unsigned int mainH;
+	unsigned int desktopW;
+	unsigned int desktopH;
+	int actualX;
+	int actualY;
+
+	int mst2X;
+	int mst2Y;
+	unsigned int mst2W;
+	unsigned int mst2H;
+	int mst3X;
+	int mst3Y;
+	unsigned int mst3W;
+	unsigned int mst3H;
+	int mst4X;
+	int mst4Y;
+	unsigned int mst4W;
+	unsigned int mst4H;
+
+	char enable;
+	char debug;
+	char logTimestamp;
+	char joinMST;
+	char maskOtherMonitors;
+	char resizeWindows;
+	char resizeAll;
+	char moveWindows;
+	char fork;
+	char filterFocus;
+	char noMouseGrab;
+	char noKeyboardGrab;
+	char noPrimarySelection;
+	char noMinSize;
+	char noMaxSize;
+	char dumb; // undocumented - act as a dumb pipe, nothing more
+	char confineMouse;
+	char noResolutionChange;
+	char noWindowStackMove;
+	char noWMRaise;
+
+	unsigned int fakeScreenW;
+	unsigned int fakeScreenH;
+	unsigned int fakeScreenDimW;
+	unsigned int fakeScreenDimH;
+
+	struct MapConfig *maps;
+};
+
+static struct Config config = {};
+
 static void log_error(const char *fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
+
+static const char* get_curtime_string()
+{
+	// This will invalidate previous return pointer on the next call.
+	// Doesn't really matter for us, since we're using it immediately.
+	static char buffer[40];
+
+	// https://stackoverflow.com/a/32983646
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	int millisec = tv.tv_usec/1000;
+
+	struct tm* tm_info = localtime(&tv.tv_sec);
+
+	// https://stackoverflow.com/a/2023961
+	size_t len = strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
+	sprintf(buffer+len, ".%03d", millisec);
+	return buffer;
+}
+
 static void log_error(const char *fmt, ...)
 {
+	const char* timestamp;
+	if (config.logTimestamp)
+		timestamp = get_curtime_string();
+
 	va_list args;
 	va_start(args, fmt);
-	fprintf(stderr, "hax11: ");
+	if (config.logTimestamp)
+		fprintf(stderr, "hax11 %s: ", timestamp);
+	else
+		fprintf(stderr, "hax11: ");
 	vfprintf(stderr, fmt, args);
 	va_end(args);
 
 	FILE* f = fopen("/tmp/hax11.log", "ab");
 	if (f)
 	{
-		fprintf(f, "[%d] ", getpid());
+		if (config.logTimestamp)
+			fprintf(f, "%s [%d] ", timestamp, getpid());
+		else
+			fprintf(f, "[%d] ", getpid());
 		va_start(args, fmt);
 		vfprintf(f, fmt, args);
 		va_end(args);
@@ -87,52 +175,6 @@ struct MapConfig
 	struct MapConfig *next;
 };
 
-struct Config
-{
-	int mainX;
-	int mainY;
-	unsigned int mainW;
-	unsigned int mainH;
-	unsigned int desktopW;
-	unsigned int desktopH;
-	int actualX;
-	int actualY;
-
-	int mst2X;
-	int mst2Y;
-	unsigned int mst2W;
-	unsigned int mst2H;
-	int mst3X;
-	int mst3Y;
-	unsigned int mst3W;
-	unsigned int mst3H;
-	int mst4X;
-	int mst4Y;
-	unsigned int mst4W;
-	unsigned int mst4H;
-
-	char enable;
-	char debug;
-	char joinMST;
-	char maskOtherMonitors;
-	char resizeWindows;
-	char resizeAll;
-	char moveWindows;
-	char fork;
-	char filterFocus;
-	char noMouseGrab;
-	char noKeyboardGrab;
-	char noPrimarySelection;
-	char noMinSize;
-	char noMaxSize;
-	char dumb; // undocumented - act as a dumb pipe, nothing more
-	char confineMouse;
-	char noResolutionChange;
-
-	struct MapConfig *maps;
-};
-
-static struct Config config = {};
 static char configLoaded = 0;
 
 enum { maxMST = 4 };
@@ -232,6 +274,7 @@ static void readConfig(const char* fn)
 
 		PARSE_INT(enable)
 		PARSE_INT(debug)
+		PARSE_INT(logTimestamp)
 		PARSE_INT(joinMST)
 		PARSE_INT(maskOtherMonitors)
 		PARSE_INT(resizeWindows)
@@ -247,6 +290,13 @@ static void readConfig(const char* fn)
 		PARSE_INT(dumb)
 		PARSE_INT(confineMouse)
 		PARSE_INT(noResolutionChange)
+		PARSE_INT(noWindowStackMove)
+		PARSE_INT(noWMRaise)
+
+		PARSE_INT(fakeScreenW)
+		PARSE_INT(fakeScreenH)
+		PARSE_INT(fakeScreenDimW)
+		PARSE_INT(fakeScreenDimH)
 
 		/* else */
 			log_error("Unknown option: %s\n", buf);
@@ -616,13 +666,16 @@ static const char* requestNames[256] =
 	NULL,
 	NULL,
 	NULL,
-	"NoOperation",
+	"NoOperation", // 127
+	// from this point on the opcodes are dynamically assigned to extensions.
+	// you can see their names with "xdpyinfo -queryExt | grep opcode"
+	// https://www.x.org/wiki/Development/Documentation/Protocol/OpCodes/
 	NULL,
 };
 
 static const char *responseNames[256] =
 {
-	"Error",
+	"Error", // 0
 	"Reply",
 	"KeyPress",
 	"KeyRelease",
@@ -658,7 +711,10 @@ static const char *responseNames[256] =
 	"ClientMessage",
 	"MappingNotify",
 	"GenericEvent",
-	NULL,
+	NULL, // 36
+	// 64-127 are dynamically assigned to extensions
+	// 128-255 are events originating from a SendEvent request
+	// https://www.x.org/releases/current/doc/xproto/x11protocol.html#event_format
 };
 
 static const char* focusModes[] = {
@@ -720,6 +776,9 @@ typedef struct
 	unsigned char opcode_Xinerama;
 	unsigned char opcode_NV_GLX;
 
+	/// Learned atoms, as returned by InternAtom
+	CARD32 atom__NET_ACTIVE_WINDOW;
+
 	/// Reply serial tracking and correction
 	CARD16 serial; // The serial of the last sent request (as seen by the server)
 	CARD16 serialLast; // The serial of the last received reply
@@ -732,6 +791,7 @@ enum
 {
 	Note_None,
 	Note_X_GetGeometry,
+	Note_X_InternAtom__NET_ACTIVE_WINDOW,
 	Note_X_InternAtom_Other,
 	Note_X_QueryExtension_XFree86_VidModeExtension,
 	Note_X_QueryExtension_RANDR,
@@ -784,6 +844,45 @@ static void debugPropSizeHints(xPropSizeHints* hints) {
 	);
 }
 
+static void logXReply(X11ConnData *data, const char* name, const xReply* reply, size_t length)
+{
+
+	// https://www.x.org/releases/current/doc/xproto/x11protocol.html#event_format
+	// Event codes 64 through 127 are reserved for extensions
+	bool isDynamicOp = (reply->generic.type & 0x40) != 0;
+	// The most significant bit in this code is set if the event was generated from a SendEvent request
+	bool isOriginSendEvent = (reply->generic.type & 0x80) != 0;
+
+	const char* responseName = isDynamicOp ? "*DYN_OP*" : responseNames[reply->generic.type & 0x7f];
+
+	if (isOriginSendEvent)
+	{
+		log_debug2(" [%d][%d] %s from SendEvent: %d (%s) length=%zu\n",
+				   data->index, reply->generic.sequenceNumber, name,
+				   reply->generic.type & 0x7f, responseName, length);
+	}
+	else
+	{
+		log_debug2(" [%d][%d] %s: %d (%s) length=%zu\n",
+				   data->index, reply->generic.sequenceNumber, name,
+				   reply->generic.type, responseName, length);
+	}
+}
+
+static void logXReq(X11ConnData *data, const char* name, const xReq* req, size_t length, CARD16 sequenceNumber)
+{
+	// https://www.x.org/releases/current/doc/xproto/x11protocol.html#request_format
+	// Major opcodes 128 through 255 are reserved for extensions
+	bool isDynamicOp = (req->reqType & 0x80) != 0;
+
+	// TODO: catch those dynamic opcode names
+	const char* reqName = isDynamicOp ? "*DYN_OP*" : requestNames[req->reqType & 0x7f];
+
+	log_debug2("[%d][%d] %s: %d (%s) with data %d, length=%zu\n",
+			   data->index, sequenceNumber, name, req->reqType, reqName, req->data, length);
+	/* log_debug2("  [server: %d] <- [client: %d]\n", sequenceNumber, sequenceNumber - data->serialDelta); */
+}
+
 static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 {
 	struct Connection conn = {};
@@ -795,7 +894,7 @@ static CARD16 injectRequest(X11ConnData *data, void* buf, size_t size)
 	sendAll(&conn, req, size);
 	CARD16 sequenceNumber = ++data->serial;
 	data->skip[sequenceNumber] = true;
-	log_debug2("[%d][%d] Injected request %d (%s) with data %d, length %zu\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, size);
+	logXReq(data, "Injected request", req, size, sequenceNumber);
 	return sequenceNumber;
 }
 
@@ -810,8 +909,7 @@ static CARD16 injectReply(X11ConnData *data, void* buf, size_t size)
 	reply->generic.sequenceNumber = data->serial - data->serialDelta--;
 	reply->generic.length = ((size < sz_xReply ? sz_xReply : size) - sz_xReply + 3) / 4;
 	sendAll(&conn, reply, size);
-	log_debug2("[%d][%d] Injected reply %d (%s) with data %d, length %zu\n",
-		data->index, reply->generic.sequenceNumber, reply->generic.type, responseNames[reply->generic.type], reply->generic.data1, size);
+	logXReply(data, "Injected reply", reply, size);
 	return reply->generic.sequenceNumber;
 }
 
@@ -821,10 +919,9 @@ static void injectEvent(X11ConnData *data, xEvent* event)
 	conn.recvfd = data->server;
 	conn.sendfd = data->client;
 	conn.dir = '}';
-
-	sendAll(&conn, event, sizeof(xEvent));
-	log_debug2("[%d] Injected event %d (%s) with data %d\n",
-		data->index, event->u.u.type, responseNames[event->u.u.type], event->u.u.detail);
+	size_t size = sizeof(xEvent);
+	sendAll(&conn, event, size);
+	logXReply(data, "Injected event", (const xReply *) event, size);
 }
 
 static void grabPointer(X11ConnData* data, Window window)
@@ -842,6 +939,91 @@ static void grabPointer(X11ConnData* data, Window window)
 	req.time = CurrentTime;
 	CARD16 serial = injectRequest(data, &req, sizeof(req));
 	data->notes[serial] = Note_X_GrabPointer;
+}
+
+static void handleServerHandshake(void* buf, size_t length)
+{
+	size_t usedbytes = sz_xConnSetup;
+	if (length < usedbytes)
+	{
+		log_debug2("malformed handshake: Too short\n");
+		return;
+	}
+	xConnSetup* c = (xConnSetup *)buf;
+	buf += sz_xConnSetup;
+	log_debug2(" xConnSetup vendor='%.*s' numRoots=%d numFormats=%d\n",
+			   c->nbytesVendor, (char*) buf, c->numRoots, c->numFormats);
+
+	// fakeScreenResolution
+	if (config.fakeScreenW == 0
+	&& config.fakeScreenH == 0
+	&& config.fakeScreenDimW == 0
+	&& config.fakeScreenDimH == 0)
+		return;
+	// vendor length is padded to 4 bytes
+	// https://github.com/mirror/libX11/blob/ff8706a5eae25b8bafce300527079f68a201d27f/src/OpenDis.c#L311-L336
+	usedbytes += pad(c->nbytesVendor) + sz_xPixmapFormat * c->numFormats;
+	if (length < usedbytes)
+	{
+		log_debug2("malformed handshake: Too short\n");
+		return;
+	}
+	buf += pad(c->nbytesVendor) + sz_xPixmapFormat * c->numFormats;
+
+	for (int i = 0; i < c->numRoots; ++i)
+	{
+		usedbytes += sz_xWindowRoot;
+		if (length < usedbytes)
+		{
+			log_debug2("malformed handshake: Too short\n");
+			return;
+		}
+		xWindowRoot* root = (xWindowRoot *)buf;
+		buf += sz_xWindowRoot;
+
+		log_debug2(" xWindowRoot #%d (%dx%d %dmmx%dmm)\n",
+				   i, root->pixWidth, root->pixHeight, root->mmWidth, root->mmHeight);
+		if (config.fakeScreenW > 0)
+			root->pixWidth = config.fakeScreenW;
+		if (config.fakeScreenH > 0)
+			root->pixHeight = config.fakeScreenH;
+
+		if (config.fakeScreenDimW > 0)
+			root->mmWidth = config.fakeScreenDimW;
+		if (config.fakeScreenDimH > 0)
+			root->mmHeight = config.fakeScreenDimH;
+
+		log_debug2(" ->             (%dx%d %dmmx%dmm)\n",
+				   root->pixWidth, root->pixHeight, root->mmWidth, root->mmHeight);
+		// now skip to the next root
+		// after each root there are nDepths of xDepth
+		for (int j = 0; j < root->nDepths; ++j) {
+			usedbytes += sz_xDepth;
+			if (length < usedbytes)
+			{
+				log_debug2("malformed handshake: Too short\n");
+				return;
+			}
+			xDepth *depth = (xDepth*) buf;
+			buf += sz_xDepth;
+			// after each xDepth there are nVisuals of xVisualType.
+
+			usedbytes += depth->nVisuals * sz_xVisualType;
+			if (length < usedbytes)
+			{
+				log_debug2("malformed handshake: Too short\n");
+				return;
+			}
+			buf += depth->nVisuals * sz_xVisualType;
+		}
+		// now we should hopefully be at the next root.
+		// TODO: i didn't test this.
+	}
+	if (length != usedbytes)
+	{
+		log_debug2("handleServerHandshake length != usedbytes %zu != %zu. This could be a sign of a bug in code.\n",
+				   length, usedbytes);
+	}
 }
 
 static bool handleClientData(X11ConnData* data)
@@ -892,8 +1074,8 @@ static bool handleClientData(X11ConnData* data)
 		ofs += 4;
 	}
 	CARD16 sequenceNumber = ++data->serial;
-	log_debug2("[%d][%d] Request %d (%s) with data %d, length %d\n", data->index, sequenceNumber, req->reqType, requestNames[req->reqType], req->data, requestLength);
-	/* log_debug2("  [server: %d] <- [client: %d]\n", sequenceNumber, sequenceNumber - data->serialDelta); */
+	logXReq(data, "Request", req, requestLength, sequenceNumber);
+
 	bufSize(&data->buf, &data->bufLen, requestLength);
 	req = (xReq*)data->buf; // in case bufSize moved buf
 
@@ -918,39 +1100,65 @@ static bool handleClientData(X11ConnData* data)
 		{
 			xConfigureWindowReq* req = (xConfigureWindowReq*)data->buf;
 
-			INT16 dummyXY = 0;
-			CARD16 dummyW = config.mainW;
-			CARD16 dummyH = config.mainH;
-			INT16 *x = &dummyXY, *y = &dummyXY;
+			INT16 dummyX = 0, dummyY = 0;
+			CARD16 dummyW = config.mainW, dummyH = config.mainH;
+			CARD16 dummyBorder = 0;
+			CARD32 dummySibling = 0;
+			CARD8 dummyStackMode = 0;
+
+			INT16 *x = &dummyX, *y = &dummyY;
 			CARD16 *w = &dummyW, *h = &dummyH;
+			CARD16 *border = &dummyBorder;
+			CARD32 *sibling = &dummySibling;
+			CARD8 *stackMode = &dummyStackMode;
 
-			int* ptr = (int*)(data->buf + sz_xConfigureWindowReq);
-			if (req->mask & 0x0001) // x
-			{
-				x = (INT16*)ptr;
-				ptr++;
-			}
-			if (req->mask & 0x0002) // y
-			{
-				y = (INT16*)ptr;
-				ptr++;
-			}
-			if (req->mask & 0x0004) // width
-			{
-				w = (CARD16*)ptr;
-				ptr++;
-			}
-			if (req->mask & 0x0008) // height
-			{
-				h = (CARD16*)ptr;
-				ptr++;
+			// an ugly hack for a pretty log :(
+			const char* bm[7] = { "" , "", "", "", "", "", ""};
+			// for the macro.
+			INT32* _ptr = (INT32*)(data->buf + sz_xConfigureWindowReq);
+			const char** _bm = bm;
+			#define GET_VALUE_PTR_MASKED(m, type, ret) \
+				if(req->mask & m) \
+				{ \
+					ret = (type*) _ptr; \
+					_ptr++; \
+					*_bm = #m " "; \
+				} \
+				_bm++;
+			GET_VALUE_PTR_MASKED(CWX, INT16, x);
+			GET_VALUE_PTR_MASKED(CWY, INT16, y);
+			GET_VALUE_PTR_MASKED(CWWidth, CARD16, w);
+			GET_VALUE_PTR_MASKED(CWHeight, CARD16, h);
+			GET_VALUE_PTR_MASKED(CWBorderWidth, CARD16, border);
+			GET_VALUE_PTR_MASKED(CWSibling, CARD32, sibling);
+			GET_VALUE_PTR_MASKED(CWStackMode, CARD8, stackMode);
+			#undef GET_VALUE_PTR_MASKED
+
+			log_debug2(
+					" XConfigureWindow(%dx%d @ %dx%d border=%d sibling=%"PRIuCARD32" stackMode=%d"
+					" mask=0x%04X ( %s%s%s%s%s%s%s) )\n",
+					*w, *h, *x, *y, *border, *sibling, *stackMode,
+					req->mask, bm[0], bm[1], bm[2], bm[3], bm[4], bm[5], bm[6]
+			);
+
+			if (config.noWindowStackMove && (req->mask & CWStackMode)) {
+				req->mask &= ~CWStackMode;
+				bm[6] = "";
+				requestLength -= 4;
+				if (req->length) // Big Requests Extension
+					req->length -= 1;
+				// TODO: possibly drop packets with an empty mask?
 			}
 
-			log_debug2(" XConfigureWindow(%dx%d @ %dx%d mask=0x%04X )\n", *w, *h, *x, *y, req->mask);
 			fixCoords(x, y, w, h);
-			log_debug2(" ->              (%dx%d @ %dx%d)\n", *w, *h, *x, *y);
+			log_debug2(
+					" XConfigureWindow(%dx%d @ %dx%d border=%d sibling=%"PRIuCARD32" stackMode=%d"
+					" mask=0x%04X ( %s%s%s%s%s%s%s) )\n",
+					*w, *h, *x, *y, *border, *sibling, *stackMode,
+					req->mask, bm[0], bm[1], bm[2], bm[3], bm[4], bm[5], bm[6]
+			);
 
-			if ((req->mask & 0x000C) == 0x000C && *w == 0 && *h == 0)
+			if ((req->mask & (CWWidth | CWHeight)) == (CWWidth | CWHeight) && *w == 0 && *h == 0)
 				__builtin_trap();
 
 			break;
@@ -969,7 +1177,10 @@ static bool handleClientData(X11ConnData* data)
 			xInternAtomReq* req = (xInternAtomReq*)data->buf;
 			const char* name = (const char*)(data->buf + sz_xInternAtomReq);
 			log_debug2(" XInternAtom: %.*s\n", req->nbytes, name);
-			data->notes[sequenceNumber] = Note_X_InternAtom_Other;
+			if (!strmemcmp("_NET_ACTIVE_WINDOW", name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_InternAtom__NET_ACTIVE_WINDOW;
+			else
+				data->notes[sequenceNumber] = Note_X_InternAtom_Other;
 			break;
 		}
 
@@ -1095,7 +1306,36 @@ static bool handleClientData(X11ConnData* data)
 			}
 			break;
 		}
-
+		case X_SendEvent:
+		{
+			xSendEventReq* req = (xSendEventReq *)data->buf;
+			log_debug2(" XSendEvent: propagate=%d window=%"PRIuCARD32" event-mask=%"PRIxCARD32" event=%d (%s)\n",
+					   req->propagate, req->destination, req->eventMask, req->event.u.u.type, responseNames[req->event.u.u.type]);
+			if (req->event.u.u.type == ClientMessage)
+			{
+				CARD32 type = req->event.u.clientMessage.u.b.type;
+				CARD32 subject_window = req->event.u.clientMessage.window;
+				log_debug2(" -> ClientMessage: window=%"PRIuCARD32" type=%"PRIuCARD32" format=%d bit data:\n",
+						   subject_window, type, req->event.u.u.detail);
+				hexDump(req->event.u.clientMessage.u.b.bytes, 20, ' ', ' ');
+				// This is a request to the window manager to make window active.
+				// https://specifications.freedesktop.org/wm-spec/1.3/ar01s03.html
+				if (type == data->atom__NET_ACTIVE_WINDOW)
+				{
+					log_debug2("    _NET_ACTIVE_WINDOW: source=%"PRIuCARD32" timestamp=%"PRIuCARD32
+					           " requestors_active_window=%"PRIuCARD32"\n",
+							   req->event.u.clientMessage.u.l.longs0, req->event.u.clientMessage.u.l.longs1,
+							   req->event.u.clientMessage.u.l.longs2);
+					if (config.noWMRaise)
+					{
+						log_debug2("    _NET_ACTIVE_WINDOW: Stubbing client request\n");
+						req->reqType=X_NoOperation;
+						// TODO: drop the packet instead?
+					}
+				}
+			}
+			break;
+		}
 		case 0:
 			break;
 
@@ -1211,6 +1451,7 @@ static bool handleServerData(X11ConnData* data)
 		size_t dataLength = header.length * 4;
 		bufSize(&data->buf, &data->bufLen, dataLength);
 		if (!recvAll(&conn, data->buf, dataLength)) return false;
+		handleServerHandshake(data->buf, dataLength);
 		if (!sendAll(&conn, data->buf, dataLength)) return false;
 
 		data->serverInitialized = true;
@@ -1229,8 +1470,7 @@ static bool handleServerData(X11ConnData* data)
 		if (!recvAll(&conn, data->buf+ofs, dataLength)) return false;
 		ofs += dataLength;
 	}
-	log_debug2(" [%d]Response: %d (%s) sequenceNumber=%d length=%zu\n",
-		data->index, reply->generic.type, responseNames[reply->generic.type], reply->generic.sequenceNumber, ofs);
+	logXReply(data, "Response", reply, ofs);
 
 	bool serialIsValid = true;
 
@@ -1254,6 +1494,14 @@ static bool handleServerData(X11ConnData* data)
 					log_debug2("  XGetGeometry(%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
 					fixCoords(&r->x, &r->y, &r->width, &r->height);
 					log_debug2("  ->          (%d,%d,%d,%d)\n", r->x, r->y, r->width, r->height);
+					break;
+				}
+
+				case Note_X_InternAtom__NET_ACTIVE_WINDOW:
+				{
+					xInternAtomReply* r = &reply->atom;
+					log_debug2("  X_InternAtom: (_NET_ACTIVE_WINDOW) atom=%"PRIuCARD32"\n", r->atom);
+					data->atom__NET_ACTIVE_WINDOW = r->atom;
 					break;
 				}
 

@@ -73,10 +73,15 @@ Name                  | Values  | Description
 `NoResolutionChange`  | `0`/`1` | Boolean - Disable setting screen resolution.
 `NoMinSize`           | `0`/`1` | Boolean - Disable minimum window size restriction.
 `NoMaxSize`           | `0`/`1` | Boolean - Disable maximum window size restriction.
+`NoWindowStackMove`   | `0`/`1` | Boolean - Disable moving windows through the window stack. Prevents moving windows to the top or bottom.
+`NoWMRaise`           | `0`/`1` | Boolean - Filter out `_NET_ACTIVE_WINDOW` requests, prevents asking the window manager to raise windows to the top. 
+`FakeScreenW`/`H`     | Integer | Fake the reported resolution of all X11 screens to the application on X11 handshake. Active when non zero
+`FakeScreenDimW`/`H`  | Integer | Fake the reported dimensions in millimeters of all X11 screens to the application on X11 handshake. Active when non zero
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)
 `MainW`/`H`           | Integer | The resolution of your primary monitor (or total resolution of monitors to be used for games)
 `DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)
 `Debug`               | Integer | Log level - Non-zero enables debugging output to stderr and `/tmp/hax11.log`
+`LogTimestamp`        | `0`/`1` | Boolean - Enable timestamp logging
 `MSTnX`/`Y`/`W`/`H`   | Integer | Coordinates and sizes of additional MST monitors (`n` can be `2`, `3` or `4`).
 `MapK`/`B`*integer*   | Key     | Map keys or buttons - see below
 

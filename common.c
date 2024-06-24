@@ -1055,22 +1055,22 @@ static bool handleClientData(X11ConnData* data)
 			CARD16 *w = &dummyW, *h = &dummyH;
 
 			int* ptr = (int*)(data->buf + sz_xConfigureWindowReq);
-			if (req->mask & 0x0001) // x
+			if (req->mask & CWX)
 			{
 				x = (INT16*)ptr;
 				ptr++;
 			}
-			if (req->mask & 0x0002) // y
+			if (req->mask & CWY)
 			{
 				y = (INT16*)ptr;
 				ptr++;
 			}
-			if (req->mask & 0x0004) // width
+			if (req->mask & CWWidth)
 			{
 				w = (CARD16*)ptr;
 				ptr++;
 			}
-			if (req->mask & 0x0008) // height
+			if (req->mask & CWHeight)
 			{
 				h = (CARD16*)ptr;
 				ptr++;
@@ -1080,7 +1080,7 @@ static bool handleClientData(X11ConnData* data)
 			fixCoords(x, y, w, h);
 			log_debug2(" ->              (%dx%d @ %dx%d)\n", *w, *h, *x, *y);
 
-			if ((req->mask & 0x000C) == 0x000C && *w == 0 && *h == 0)
+			if ((req->mask & (CWWidth | CWHeight)) == (CWWidth | CWHeight) && *w == 0 && *h == 0)
 				__builtin_trap();
 
 			break;

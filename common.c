@@ -29,6 +29,61 @@
 
 // ****************************************************************************
 
+struct Config
+{
+	int mainX;
+	int mainY;
+	unsigned int mainW;
+	unsigned int mainH;
+	unsigned int desktopW;
+	unsigned int desktopH;
+	int actualX;
+	int actualY;
+
+	int mst2X;
+	int mst2Y;
+	unsigned int mst2W;
+	unsigned int mst2H;
+	int mst3X;
+	int mst3Y;
+	unsigned int mst3W;
+	unsigned int mst3H;
+	int mst4X;
+	int mst4Y;
+	unsigned int mst4W;
+	unsigned int mst4H;
+
+	char enable;
+	char debug;
+	char logTimestamp;
+	char joinMST;
+	char maskOtherMonitors;
+	char resizeWindows;
+	char resizeAll;
+	char moveWindows;
+	char fork;
+	char filterFocus;
+	char noMouseGrab;
+	char noKeyboardGrab;
+	char noPrimarySelection;
+	char noMinSize;
+	char noMaxSize;
+	char dumb; // undocumented - act as a dumb pipe, nothing more
+	char confineMouse;
+	char noResolutionChange;
+	char noWindowStackMove;
+	char noWMRaise;
+
+	unsigned int fakeScreenW;
+	unsigned int fakeScreenH;
+	unsigned int fakeScreenDimW;
+	unsigned int fakeScreenDimH;
+
+	struct MapConfig *maps;
+};
+
+static struct Config config = {};
+
 static void log_error(const char *fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
@@ -44,31 +99,37 @@ static const char* get_curtime_string()
 	gettimeofday(&tv, NULL);
 
 	int millisec = tv.tv_usec/1000;
-	if (millisec>=1000) { // Allow for rounding up to nearest second
-		millisec -=1000;
-		tv.tv_sec++;
-	}
 
 	struct tm* tm_info = localtime(&tv.tv_sec);
 
 	// https://stackoverflow.com/a/2023961
-	size_t len = strftime(buffer, 26, "%Y:%m:%d %H:%M:%S", tm_info);
+	size_t len = strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
 	sprintf(buffer+len, ".%03d", millisec);
 	return buffer;
 }
 
 static void log_error(const char *fmt, ...)
 {
+	const char* timestamp;
+	if (config.logTimestamp)
+		timestamp = get_curtime_string();
+
 	va_list args;
 	va_start(args, fmt);
-	fprintf(stderr, "hax11: ");
+	if (config.logTimestamp)
+		fprintf(stderr, "hax11 %s: ", timestamp);
+	else
+		fprintf(stderr, "hax11: ");
 	vfprintf(stderr, fmt, args);
 	va_end(args);
 
 	FILE* f = fopen("/tmp/hax11.log", "ab");
 	if (f)
 	{
-		fprintf(f, "%s [%d] ", get_curtime_string(), getpid());
+		if (config.logTimestamp)
+			fprintf(f, "%s [%d] ", timestamp, getpid());
+		else
+			fprintf(f, "[%d] ", getpid());
 		va_start(args, fmt);
 		vfprintf(f, fmt, args);
 		va_end(args);
@@ -114,59 +175,6 @@ struct MapConfig
 	struct MapConfig *next;
 };
 
-struct Config
-{
-	int mainX;
-	int mainY;
-	unsigned int mainW;
-	unsigned int mainH;
-	unsigned int desktopW;
-	unsigned int desktopH;
-	int actualX;
-	int actualY;
-
-	int mst2X;
-	int mst2Y;
-	unsigned int mst2W;
-	unsigned int mst2H;
-	int mst3X;
-	int mst3Y;
-	unsigned int mst3W;
-	unsigned int mst3H;
-	int mst4X;
-	int mst4Y;
-	unsigned int mst4W;
-	unsigned int mst4H;
-
-	char enable;
-	char debug;
-	char joinMST;
-	char maskOtherMonitors;
-	char resizeWindows;
-	char resizeAll;
-	char moveWindows;
-	char fork;
-	char filterFocus;
-	char noMouseGrab;
-	char noKeyboardGrab;
-	char noPrimarySelection;
-	char noMinSize;
-	char noMaxSize;
-	char dumb; // undocumented - act as a dumb pipe, nothing more
-	char confineMouse;
-	char noResolutionChange;
-	char noWindowStackMove;
-	char noWMRaise;
-
-	unsigned int fakeScreenW;
-	unsigned int fakeScreenH;
-	unsigned int fakeScreenDimW;
-	unsigned int fakeScreenDimH;
-
-	struct MapConfig *maps;
-};
-
-static struct Config config = {};
 static char configLoaded = 0;
 
 enum { maxMST = 4 };
@@ -266,6 +274,7 @@ static void readConfig(const char* fn)
 
 		PARSE_INT(enable)
 		PARSE_INT(debug)
+		PARSE_INT(logTimestamp)
 		PARSE_INT(joinMST)
 		PARSE_INT(maskOtherMonitors)
 		PARSE_INT(resizeWindows)

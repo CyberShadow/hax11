@@ -81,6 +81,7 @@ Name                  | Values  | Description
 `MainW`/`H`           | Integer | The resolution of your primary monitor (or total resolution of monitors to be used for games)
 `DesktopW`/`H`        | Integer | The resolution of your desktop (all monitors combined)
 `Debug`               | Integer | Log level - Non-zero enables debugging output to stderr and `/tmp/hax11.log`
+`LogTimestamp`        | `0`/`1` | Boolean - Enable timestamp logging
 `MSTnX`/`Y`/`W`/`H`   | Integer | Coordinates and sizes of additional MST monitors (`n` can be `2`, `3` or `4`).
 `MapK`/`B`*integer*   | Key     | Map keys or buttons - see below
 

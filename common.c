@@ -928,11 +928,18 @@ static void grabPointer(X11ConnData* data, Window window)
 	data->notes[serial] = Note_X_GrabPointer;
 }
 
-static void X11Handshake(void* buf)
+static void X11Handshake(void* buf, size_t length)
 {
+	size_t usedbytes = sz_xConnSetup;
+	if (length < usedbytes)
+	{
+		log_debug2("malformed handshake: Too short\n");
+		return;
+	}
 	xConnSetup* c = (xConnSetup *)buf;
+	buf += sz_xConnSetup;
 	log_debug2(" xConnSetup vendor='%.*s' numRoots=%d numFormats=%d\n",
-			   c->nbytesVendor, (char*) buf + sz_xConnSetup, c->numRoots, c->numFormats);
+			   c->nbytesVendor, (char*) buf, c->numRoots, c->numFormats);
 
 	// fakeScreenResolution
 	if (config.fakeScreenW <= 0
@@ -942,12 +949,25 @@ static void X11Handshake(void* buf)
 		return;
 	// vendor length is padded to 4 bytes
 	// https://github.com/mirror/libX11/blob/ff8706a5eae25b8bafce300527079f68a201d27f/src/OpenDis.c#L311-L336
-	xWindowRoot* root = (xWindowRoot *)(buf + sz_xConnSetup
-									 + pad(c->nbytesVendor)
-									 + sz_xPixmapFormat * c->numFormats);
-	// FIXME: buffer overflow could be possible here with malformed packets.
+	usedbytes += pad(c->nbytesVendor) + sz_xPixmapFormat * c->numFormats;
+	if (length < usedbytes)
+	{
+		log_debug2("malformed handshake: Too short\n");
+		return;
+	}
+	buf += pad(c->nbytesVendor) + sz_xPixmapFormat * c->numFormats;
+
 	for (int i = 0; i < c->numRoots; ++i)
 	{
+		usedbytes += sz_xWindowRoot;
+		if (length < usedbytes)
+		{
+			log_debug2("malformed handshake: Too short\n");
+			return;
+		}
+		xWindowRoot* root = (xWindowRoot *)buf;
+		buf += sz_xWindowRoot;
+
 		log_debug2(" xWindowRoot #%d (%dx%d %dmmx%dmm)\n",
 				   i, root->pixWidth, root->pixHeight, root->mmWidth, root->mmHeight);
 		if (config.fakeScreenW > 0)
@@ -965,12 +985,31 @@ static void X11Handshake(void* buf)
 		// now skip to the next root
 		// after each root there are nDepths of xDepth
 		for (int j = 0; j < root->nDepths; ++j) {
-			xDepth *depth = (xDepth*) root;
+			usedbytes += sz_xDepth;
+			if (length < usedbytes)
+			{
+				log_debug2("malformed handshake: Too short\n");
+				return;
+			}
+			xDepth *depth = (xDepth*) buf;
+			buf += sz_xDepth;
 			// after each xDepth there are nVisuals of xVisualType.
-			root = (void *)(root) + sz_xDepth + depth->nVisuals * sz_xVisualType;
+
+			usedbytes += depth->nVisuals * sz_xVisualType;
+			if (length < usedbytes)
+			{
+				log_debug2("malformed handshake: Too short\n");
+				return;
+			}
+			buf += depth->nVisuals * sz_xVisualType;
 		}
 		// now we should hopefully be at the next root.
 		// TODO: i didn't test this.
+	}
+	if (length != usedbytes)
+	{
+		log_debug2("X11Handshake length != usedbytes %zu != %zu. This could be a sign of a bug in code.\n",
+				   length, usedbytes);
 	}
 }
 
@@ -1392,7 +1431,7 @@ static bool handleServerData(X11ConnData* data)
 		size_t dataLength = header.length * 4;
 		bufSize(&data->buf, &data->bufLen, dataLength);
 		if (!recvAll(&conn, data->buf, dataLength)) return false;
-		X11Handshake(data->buf);
+		X11Handshake(data->buf, dataLength);
 		if (!sendAll(&conn, data->buf, dataLength)) return false;
 
 		data->serverInitialized = true;

@@ -2,6 +2,13 @@
 
 static void getProfileName(char *p, size_t size)
 {
+	char *env = getenv("HAX11_PROFILE");
+	if (env) {
+		strncpy(p, env, size);
+		p[size - 1] = '\0';
+		return;
+	}
+
 	readlink("/proc/self/exe", p, size);
 	char *end = p + size;
 	// Remove leading '/', replace remaining '/' to '\'

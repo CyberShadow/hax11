@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>

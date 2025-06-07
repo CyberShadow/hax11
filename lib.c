@@ -9,11 +9,24 @@ static void getProfileName(char *p, size_t size)
 		return;
 	}
 
-	readlink("/proc/self/exe", p, size);
-	char *end = p + size;
+	ssize_t nread = readlink("/proc/self/exe", p, size - 1);
+
+	if (nread == -1) {
+		log_error("readlink failed: %s\n", strerror(errno));
+		strncpy(p, "readlink-error", size - 1);
+		return;
+	}
+	if (nread == 0 || p[0] != '/') {
+		log_error("readlink got unexpected result: %s\n", p);
+		strncpy(p, "weird-readlink-result", size - 1);
+		return;
+	}
+
+	char *end = p + nread;
 	// Remove leading '/', replace remaining '/' to '\'
 	for (; *p && p<end; p++)
 		p[0] = p[1] == '/' ? '\\' : p[1];
+	end[-1] = '\0';
 }
 
 #include <sys/un.h>

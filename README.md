@@ -78,6 +78,7 @@ Name                  | Values  | Description
 `NoScreenSaverInhibit`| `0`/`1` | Boolean - Filter out `XScreenSaverSuspend` and `XResetScreenSaver` requests, preventing the program from keeping the screen from blanking.
 `OpenGLForceVSyncOff` | `0`/`1` | Boolean - Ignore the program's attempts to set the swap interval (vertical sync) via `glXSwapIntervalEXT`, so the driver default applies.
 `PadRealpath`         | `0`/`1` | Boolean - Allocate `PATH_MAX` extra bytes for paths returned by `realpath(path, NULL)`. Works around old versions of `libsteam_api.so` (shipped with many games) writing past the end of the returned buffer ([steam-for-linux#8542](https://github.com/ValveSoftware/steam-for-linux/issues/8542)).
+`TouchProfiles`       | `0`/`1` | Boolean - Update the modification time of profile files when they are loaded, to make it possible to tell which profiles are still in use. Applies to the `default` profile only if set there.
 `FakeScreenW`/`H`     | Integer | Fake the reported resolution of all X11 screens to the application on X11 handshake. Active when non zero
 `FakeScreenDimW`/`H`  | Integer | Fake the reported dimensions in millimeters of all X11 screens to the application on X11 handshake. Active when non zero
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)

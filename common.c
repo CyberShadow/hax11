@@ -79,6 +79,7 @@ struct Config
 	char noScreenSaverInhibit;
 	char openGLForceVSyncOff;
 	char padRealpath;
+	char touchProfiles;
 
 	unsigned int fakeScreenW;
 	unsigned int fakeScreenH;
@@ -307,6 +308,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(noResolutionChange)
 		PARSE_INT(openGLForceVSyncOff)
 		PARSE_INT(padRealpath)
+		PARSE_INT(touchProfiles)
 		PARSE_INT(noWindowStackMove)
 		PARSE_INT(noWMRaise)
 		PARSE_INT(noScreenSaverInhibit)
@@ -321,6 +323,8 @@ static void readConfig(const char* fn)
 
 		#undef PARSE_INT
 	}
+	if (config.touchProfiles)
+		futimens(fileno(f), NULL);
 	fclose(f);
 	//log_debug("Read config: %d %d %d %d\n", config.joinMST, config.maskOtherMonitors, config.resizeWindows, config.moveWindows);
 }

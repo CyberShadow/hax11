@@ -77,6 +77,7 @@ Name                  | Values  | Description
 `NoWMRaise`           | `0`/`1` | Boolean - Filter out `_NET_ACTIVE_WINDOW` requests, prevents asking the window manager to raise windows to the top. 
 `NoScreenSaverInhibit`| `0`/`1` | Boolean - Filter out `XScreenSaverSuspend` and `XResetScreenSaver` requests, preventing the program from keeping the screen from blanking.
 `OpenGLForceVSyncOff` | `0`/`1` | Boolean - Ignore the program's attempts to set the swap interval (vertical sync) via `glXSwapIntervalEXT`, so the driver default applies.
+`PadRealpath`         | `0`/`1` | Boolean - Allocate `PATH_MAX` extra bytes for paths returned by `realpath(path, NULL)`. Works around old versions of `libsteam_api.so` (shipped with many games) writing past the end of the returned buffer ([steam-for-linux#8542](https://github.com/ValveSoftware/steam-for-linux/issues/8542)).
 `FakeScreenW`/`H`     | Integer | Fake the reported resolution of all X11 screens to the application on X11 handshake. Active when non zero
 `FakeScreenDimW`/`H`  | Integer | Fake the reported dimensions in millimeters of all X11 screens to the application on X11 handshake. Active when non zero
 `MainX`/`Y`           | Integer | The X11 coordinates of your primary monitor (or left-top-most monitor to be used for games)

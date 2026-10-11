@@ -174,6 +174,28 @@ int connect(int socket, const struct sockaddr *address,
 	return connect_result;
 }
 
+// Work around https://github.com/ValveSoftware/steam-for-linux/issues/8542
+__attribute__ ((visibility("default")))
+char *realpath(
+	const char *restrict path,
+	char *restrict resolved_path
+)
+{
+	char* res = NEXT(libc, LIBC_SO, realpath)(path, resolved_path);
+	if (resolved_path == NULL && res != NULL)
+	{
+		needConfig();
+		if (config.enable && config.padRealpath)
+		{
+			char* copy = (char*)malloc(strlen(res) + /*PATH_MAX*/4096);
+			strcpy(copy, res);
+			free(res);
+			res = copy;
+		}
+	}
+	return res;
+}
+
 #define LIBGL_SO "/usr/lib/libGL.so"
 
 static void* libGL = NULL;

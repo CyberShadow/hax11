@@ -78,6 +78,7 @@ struct Config
 	char noWMRaise;
 	char noScreenSaverInhibit;
 	char openGLForceVSyncOff;
+	char padRealpath;
 
 	unsigned int fakeScreenW;
 	unsigned int fakeScreenH;
@@ -305,6 +306,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(confineMouse)
 		PARSE_INT(noResolutionChange)
 		PARSE_INT(openGLForceVSyncOff)
+		PARSE_INT(padRealpath)
 		PARSE_INT(noWindowStackMove)
 		PARSE_INT(noWMRaise)
 		PARSE_INT(noScreenSaverInhibit)

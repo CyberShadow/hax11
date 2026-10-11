@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <poll.h>
+#include <sched.h>
 #include <inttypes.h>
 #include <sys/time.h>
 #include <time.h>
@@ -184,8 +185,6 @@ struct MapConfig
 	struct MapConfig *next;
 };
 
-static char configLoaded = 0;
-
 enum { maxMST = 4 };
 static          int* mstConfigX[maxMST] = { &config.mainX, &config.mst2X, &config.mst3X, &config.mst4X };
 static          int* mstConfigY[maxMST] = { &config.mainY, &config.mst2Y, &config.mst3Y, &config.mst4Y };
@@ -328,12 +327,8 @@ static void readConfig(const char* fn)
 
 static void getProfileName(char *buf, size_t size);
 
-static void needConfig()
+static void loadConfig()
 {
-	if (configLoaded)
-		return;
-	configLoaded = 1;
-
 	// Default settings
 	config.mainX = 0;
 	config.mainY = 0;
@@ -357,6 +352,26 @@ static void needConfig()
 
 	getProfileName(p + 1, sizeof(buf) - (p-buf));
 	readConfig(buf);
+}
+
+// Load the configuration if it hasn't been loaded yet.
+// May be called concurrently from any thread; returns once the configuration is fully loaded.
+static void needConfig()
+{
+	enum { notLoaded, loading, loaded };
+	static int state = notLoaded;
+	if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) == loaded)
+		return;
+
+	int expected = notLoaded;
+	if (__atomic_compare_exchange_n(&state, &expected, loading, false, __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE))
+	{
+		loadConfig();
+		__atomic_store_n(&state, loaded, __ATOMIC_RELEASE);
+	}
+	else
+		while (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != loaded)
+			sched_yield();
 }
 
 // ****************************************************************************

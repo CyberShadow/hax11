@@ -26,6 +26,7 @@
 #include <X11/extensions/randr.h>
 #include <X11/extensions/randrproto.h>
 #include <X11/extensions/panoramiXproto.h>
+#include <X11/extensions/saverproto.h>
 
 // ****************************************************************************
 
@@ -73,6 +74,7 @@ struct Config
 	char noResolutionChange;
 	char noWindowStackMove;
 	char noWMRaise;
+	char noScreenSaverInhibit;
 
 	unsigned int fakeScreenW;
 	unsigned int fakeScreenH;
@@ -292,6 +294,7 @@ static void readConfig(const char* fn)
 		PARSE_INT(noResolutionChange)
 		PARSE_INT(noWindowStackMove)
 		PARSE_INT(noWMRaise)
+		PARSE_INT(noScreenSaverInhibit)
 
 		PARSE_INT(fakeScreenW)
 		PARSE_INT(fakeScreenH)
@@ -775,6 +778,7 @@ typedef struct
 	unsigned char opcode_RANDR;
 	unsigned char opcode_Xinerama;
 	unsigned char opcode_NV_GLX;
+	unsigned char opcode_MIT_SCREEN_SAVER;
 
 	/// Learned atoms, as returned by InternAtom
 	CARD32 atom__NET_ACTIVE_WINDOW;
@@ -797,6 +801,7 @@ enum
 	Note_X_QueryExtension_RANDR,
 	Note_X_QueryExtension_Xinerama,
 	Note_X_QueryExtension_NV_GLX,
+	Note_X_QueryExtension_MIT_SCREEN_SAVER,
 	Note_X_QueryExtension_Other,
 	Note_X_XF86VidModeGetModeLine,
 	Note_X_XF86VidModeGetAllModeLines,
@@ -1240,6 +1245,9 @@ static bool handleClientData(X11ConnData* data)
 			if (!strmemcmp("NV-GLX", name, req->nbytes))
 				data->notes[sequenceNumber] = Note_X_QueryExtension_NV_GLX;
 			else
+			if (!strmemcmp(ScreenSaverName, name, req->nbytes))
+				data->notes[sequenceNumber] = Note_X_QueryExtension_MIT_SCREEN_SAVER;
+			else
 				data->notes[sequenceNumber] = Note_X_QueryExtension_Other;
 			break;
 		}
@@ -1336,6 +1344,17 @@ static bool handleClientData(X11ConnData* data)
 			}
 			break;
 		}
+		case X_ForceScreenSaver:
+		{
+			// XResetScreenSaver, used to periodically postpone the screen saver
+			if (config.noScreenSaverInhibit && req->data == ScreenSaverReset)
+			{
+				log_debug("Stubbing X_ForceScreenSaver(ScreenSaverReset) request\n");
+				req->reqType = X_NoOperation;
+			}
+			break;
+		}
+
 		case 0:
 			break;
 
@@ -1412,6 +1431,17 @@ static bool handleClientData(X11ConnData* data)
 				fclose(f);
 #endif
 				data->notes[sequenceNumber] = Note_NV_GLX;
+			}
+			else
+			if (req->reqType == data->opcode_MIT_SCREEN_SAVER)
+			{
+				log_debug2(" MIT-SCREEN-SAVER - %d\n", req->data);
+				if (req->data == X_ScreenSaverSuspend && config.noScreenSaverInhibit)
+				{
+					// XScreenSaverSuspend, used to inhibit the screen saver (and DPMS)
+					log_debug("Stubbing X_ScreenSaverSuspend request\n");
+					req->reqType = X_NoOperation;
+				}
 			}
 			break;
 		}
@@ -1549,6 +1579,16 @@ static bool handleServerData(X11ConnData* data)
 						r->present, r->major_opcode, r->first_event, r->first_error);
 					if (r->present)
 						data->opcode_NV_GLX = r->major_opcode;
+					break;
+				}
+
+				case Note_X_QueryExtension_MIT_SCREEN_SAVER:
+				{
+					xQueryExtensionReply* r = &reply->extension;
+					log_debug2("  X_QueryExtension (MIT-SCREEN-SAVER): present=%d major_opcode=%d first_event=%d first_error=%d\n",
+						r->present, r->major_opcode, r->first_event, r->first_error);
+					if (r->present)
+						data->opcode_MIT_SCREEN_SAVER = r->major_opcode;
 					break;
 				}
 
